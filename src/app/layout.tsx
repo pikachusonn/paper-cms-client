@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import AppSidebar from "@/components/common/sidebar";
+import { IoHomeOutline } from "react-icons/io5";
+import { IoIosNotificationsOutline } from "react-icons/io";
+import { CiUser } from "react-icons/ci";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,13 +29,39 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const items = [
+    {
+      title: "Quản lý giấy tờ",
+      url: "/",
+      icon: <IoHomeOutline />,
+    },
+    {
+      title: "Thông báo",
+      url: "notification",
+      icon: <IoIosNotificationsOutline />,
+    },
+    {
+      title: "Quản lý nhân sự",
+      url: "#",
+      icon: <CiUser  />,
+    },
+  ];
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          {children}
+          <SidebarProvider>
+            <AppSidebar items={items} />
+            <main className="w-full">
+              {/* <SidebarTrigger/> */}
+              <div className="w-full">
+                {" "}
+                <TooltipProvider> {children}</TooltipProvider>
+              </div>
+            </main>
+          </SidebarProvider>
         </Providers>
       </body>
     </html>

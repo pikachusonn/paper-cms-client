@@ -21,6 +21,8 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
             }
 
             if (!!refreshToken && (isAuthRoute || isPublicRoute)) {
+                console.log("heheh");
+                
                 window.location.href = "/";
                 return;
             }
