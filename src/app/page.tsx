@@ -1,274 +1,246 @@
 "use client";
 
+import { useState } from "react";
+import { useQuery } from "@apollo/client/react"; // Import theo ý bạn
+import { GET_DASHBOARD_STATS } from "@/lib/graphql/queries/court";
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
 } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
-  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import clsx from "clsx";
-import { useRouter } from "next/navigation";
 import { CiSearch } from "react-icons/ci";
-import { FaFireFlameCurved } from "react-icons/fa6";
+import Link from "next/link";
 
-export default function Home() {
-  const court = [
-    {
-      id: 1,
-      courtName: "Toà án Sơn Tây",
-      address: "12 Ngô Quyền, thị xã Sơn Tây, Hà Nội",
-      totalUnprocessed: 3,
-      isOverdue: 1,
-    },
-    {
-      id: 2,
-      courtName: "Toà án Ba Đình",
-      address: "45 Liễu Giai, quận Ba Đình, Hà Nội",
-      totalUnprocessed: 5,
-      isOverdue: 2,
-    },
-    {
-      id: 3,
-      courtName: "Toà án Đống Đa",
-      address: "18 Tôn Đức Thắng, quận Đống Đa, Hà Nội",
-      totalUnprocessed: 2,
-      isOverdue: 0,
-    },
-    {
-      id: 4,
-      courtName: "Toà án Cầu Giấy",
-      address: "102 Trần Đăng Ninh, quận Cầu Giấy, Hà Nội",
-      totalUnprocessed: 7,
-      isOverdue: 3,
-    },
-    {
-      id: 5,
-      courtName: "Toà án Hoàn Kiếm",
-      address: "6 Hai Bà Trưng, quận Hoàn Kiếm, Hà Nội",
-      totalUnprocessed: 1,
-      isOverdue: 0,
-    },
-    {
-      id: 6,
-      courtName: "Toà án Hai Bà Trưng",
-      address: "55 Lò Đúc, quận Hai Bà Trưng, Hà Nội",
-      totalUnprocessed: 4,
-      isOverdue: 1,
-    },
-    {
-      id: 7,
-      courtName: "Toà án Thanh Xuân",
-      address: "89 Nguyễn Trãi, quận Thanh Xuân, Hà Nội",
-      totalUnprocessed: 6,
-      isOverdue: 2,
-    },
-    {
-      id: 8,
-      courtName: "Toà án Hà Đông",
-      address: "15 Quang Trung, quận Hà Đông, Hà Nội",
-      totalUnprocessed: 8,
-      isOverdue: 4,
-    },
-    {
-      id: 9,
-      courtName: "Toà án Long Biên",
-      address: "22 Nguyễn Văn Cừ, quận Long Biên, Hà Nội",
-      totalUnprocessed: 3,
-      isOverdue: 1,
-    },
-    {
-      id: 10,
-      courtName: "Toà án Tây Hồ",
-      address: "9 Âu Cơ, quận Tây Hồ, Hà Nội",
-      totalUnprocessed: 2,
-      isOverdue: 0,
-    },
-    {
-      id: 11,
-      courtName: "Toà án Bắc Từ Liêm",
-      address: "120 Phạm Văn Đồng, quận Bắc Từ Liêm, Hà Nội",
-      totalUnprocessed: 5,
-      isOverdue: 1,
-    },
-    {
-      id: 12,
-      courtName: "Toà án Nam Từ Liêm",
-      address: "30 Lê Đức Thọ, quận Nam Từ Liêm, Hà Nội",
-      totalUnprocessed: 4,
-      isOverdue: 2,
-    },
-    {
-      id: 13,
-      courtName: "Toà án Hoàng Mai",
-      address: "77 Tam Trinh, quận Hoàng Mai, Hà Nội",
-      totalUnprocessed: 6,
-      isOverdue: 3,
-    },
-    {
-      id: 14,
-      courtName: "Toà án Gia Lâm",
-      address: "10 Ngô Xuân Quảng, huyện Gia Lâm, Hà Nội",
-      totalUnprocessed: 2,
-      isOverdue: 0,
-    },
-    {
-      id: 15,
-      courtName: "Toà án Đông Anh",
-      address: "5 Cao Lỗ, huyện Đông Anh, Hà Nội",
-      totalUnprocessed: 7,
-      isOverdue: 2,
-    },
-    {
-      id: 16,
-      courtName: "Toà án Sóc Sơn",
-      address: "88 Núi Đôi, huyện Sóc Sơn, Hà Nội",
-      totalUnprocessed: 3,
-      isOverdue: 1,
-    },
-    {
-      id: 17,
-      courtName: "Toà án Thanh Trì",
-      address: "14 Ngọc Hồi, huyện Thanh Trì, Hà Nội",
-      totalUnprocessed: 5,
-      isOverdue: 2,
-    },
-    {
-      id: 18,
-      courtName: "Toà án Thường Tín",
-      address: "33 Quốc lộ 1A, huyện Thường Tín, Hà Nội",
-      totalUnprocessed: 1,
-      isOverdue: 0,
-    },
-    {
-      id: 19,
-      courtName: "Toà án Phú Xuyên",
-      address: "66 Tiểu khu Phú Minh, huyện Phú Xuyên, Hà Nội",
-      totalUnprocessed: 4,
-      isOverdue: 1,
-    },
-    {
-      id: 20,
-      courtName: "Toà án Chương Mỹ",
-      address: "25 Quốc lộ 6, huyện Chương Mỹ, Hà Nội",
-      totalUnprocessed: 6,
-      isOverdue: 3,
-    },
-  ];
+const DashboardPage = () => {
+  // State quản lý tham số API
+  const [year, setYear] = useState<number>(2025); // Biến year (Int!)
+  const [tempSearch, setTempSearch] = useState(""); // Lưu giá trị đang gõ
+  const [appliedSearch, setAppliedSearch] = useState(""); // Giá trị thực tế dùng để query
 
-  const router = useRouter();
+  // 1. Gọi API với các biến từ Input
+  const { data, loading, error, refetch } = useQuery(GET_DASHBOARD_STATS, {
+    variables: {
+      year: year,
+      searchCourt: appliedSearch,
+    },
+    fetchPolicy: "cache-and-network",
+  });
+
+  // Hàm xử lý tìm kiếm khi nhấn nút kính lúp
+  const handleSearch = () => {
+    setAppliedSearch(tempSearch);
+  };
+
+  // Hàm xử lý khi nhấn Enter ở ô search
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSearch();
+  };
+
+  const stats = data?.dashboardStats;
+  const courts = stats?.courts || [];
+
   return (
-    <div className="flex flex-col gap-2 min-h-screen bg-zinc-50 font-sans dark:bg-black p-4">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink
-              href="/"
-              className="font-semibold text-[16px] text-black"
-            >
-              Quản lý giấy tờ
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-      <div className="w-full p-4 rounded-md border border-black/20 shadow-md flex items-center justify-between">
-        <div className="flex items-center justify-between gap-[50px]">
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] font-semibold">20</span>
-            <span className="max-w-[100px]">Giấy tờ chưa tống đạt</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] font-semibold flex items-center text-orange-500">
-              15 <FaFireFlameCurved />
+    <div className="min-h-screen p-4 flex flex-col gap-6 bg-[#f8f9fa]">
+      {/* Header */}
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-gray-400 font-medium">
+          Quản lý giấy tờ
+        </span>
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                href="/"
+                className="font-bold text-xl text-black hover:text-black"
+              >
+                Quản lý giấy tờ
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
+
+      {/* --- PHẦN 1: SUMMARY BAR CÓ Ô NHẬP NĂM --- */}
+      <div className="grid grid-cols-5 gap-0 bg-white rounded-xl border shadow-sm overflow-hidden">
+        <div className="flex flex-col p-6 border-r">
+          <div className="flex items-end gap-3">
+            <span className="text-5xl font-medium tracking-tighter">
+              {stats?.totalWaiting || 0}
             </span>
-            <span className="max-w-[100px]">Giấy tờ quá hạn tống đạt</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] font-semibold">20</span>
-            <span className="max-w-[100px]">Giấy tờ chưa tống đạt</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] font-semibold">1</span>
-            <span className="max-w-[100px]">Nhân viên nhập liệu</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] font-semibold">20</span>
-            <span className="max-w-[100px]">thư kí tống đạt</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] font-semibold">20</span>
-            <span className="max-w-[100px]">chi nhánh toà án</span>
+            <span className="text-[11px] text-gray-500 font-medium leading-[1.2] mb-1">
+              Giấy tờ chưa
+              <br />
+              tống đạt
+            </span>
           </div>
         </div>
-        <p className="font-semibold max-w-[100px]">Số liệu thống kê năm 2025</p>
-      </div>
-      <div className="relative mt-[8px]">
-        <CiSearch className="absolute left-[8px] top-1/2 -translate-y-1/2" />
-        <Input className="pl-[32px]" placeholder="Tìm kiếm toà án" />
-      </div>
-      <div className="border rounded-md max-h-[65vh] overflow-y-auto">
-        <Table className="relative">
-          <TableHeader className="sticky top-0 bg-white border-b border-black!">
-            <TableRow>
-              <TableHead className="w-[5%] py-[16px]">STT</TableHead>
-              <TableHead className="w-[25%] py-[16px]">Tên Toà Án</TableHead>
-              <TableHead className="w-[25%] py-[16px]">Địa Chỉ</TableHead>
-              <TableHead className="w-[20%] py-[16px]">
-                Số giấy tờ chưa tống đạt
-              </TableHead>
-              <TableHead className="w-[20%] py-[16px]">
-                Số giấy tờ đến hạn tống đạt
-              </TableHead>
-            </TableRow>
-          </TableHeader>
 
-          <TableBody>
-            {court
-              ?.sort((c1, c2) => c2?.isOverdue - c1.isOverdue)
-              .map((court, index) => (
-                <TableRow
-                  key={court.id}
-                  onClick={() => {
-                    router.push(`/court/${court?.id}`);
-                  }}
-                  className={clsx(
-                    court?.isOverdue > 0 ? "bg-[#FFBB00]/30" : "",
-                    "hover:border-black border-t! hover:bg-[#FFBB00]/50",
-                  )}
-                >
-                  <TableCell className="font-medium py-[16px]">
-                    {index}
+        <div className="flex flex-col p-6 border-r">
+          <div className="flex items-end gap-3">
+            <span className="text-5xl font-medium tracking-tighter text-[#eb5211]">
+              {stats?.totalOverdue || 0}
+              <span className="text-2xl ml-1">🔥</span>
+            </span>
+            <span className="text-[11px] text-gray-500 font-medium leading-[1.2] mb-1">
+              Giấy tờ quá
+              <br />
+              hạn tống đạt
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col p-6 border-r">
+          <div className="flex items-end gap-3">
+            <span className="text-5xl font-medium tracking-tighter">
+              {stats?.totalStaff || 0}
+            </span>
+            <span className="text-[11px] text-gray-500 font-medium leading-[1.2] mb-1">
+              Nhân viên nhập
+              <br />
+              liệu
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col p-6 border-r">
+          <div className="flex items-end gap-3">
+            <span className="text-5xl font-medium tracking-tighter">
+              {stats?.totalSecretary || 0}
+            </span>
+            <span className="text-[11px] text-gray-500 font-medium leading-[1.2] mb-1">
+              Thư ký
+            </span>
+          </div>
+        </div>
+
+        {/* Ô NHẬP NĂM (YEAR INPUT) */}
+        <div className="flex flex-col p-6 justify-center items-end bg-gray-50/50">
+          <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider mb-1">
+            Số liệu thống kê năm
+          </span>
+          <Input
+            type="number"
+            className="w-20 h-10 text-xl font-black text-right bg-transparent border-none focus-visible:ring-0 p-0"
+            value={year}
+            onChange={(e) => setYear(parseInt(e.target.value) || 0)}
+          />
+        </div>
+      </div>
+
+      {/* --- PHẦN 2: SEARCH BAR CÓ NÚT TÌM KIẾM --- */}
+      <div className="relative flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            placeholder="Tìm kiếm tòa án"
+            className="pl-4 h-14 bg-white border-gray-200 rounded-xl text-lg shadow-sm focus-visible:ring-blue-500"
+            value={tempSearch}
+            onChange={(e) => setTempSearch(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+        <Button
+          onClick={handleSearch}
+          className="h-14 w-14 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 shadow-sm"
+        >
+          <CiSearch size={28} />
+        </Button>
+      </div>
+
+      {/* --- TABLE DANH SÁCH --- */}
+      <div className="border rounded-xl bg-white shadow-sm overflow-hidden min-h-[400px]">
+        {loading ? (
+          <div className="p-20 text-center animate-pulse text-gray-400 italic">
+            Đang cập nhật danh sách...
+          </div>
+        ) : (
+          <Table>
+            <TableHeader className="bg-gray-50/50">
+              <TableRow className="hover:bg-transparent border-b-2">
+                <TableHead className="w-[80px] text-center font-bold text-gray-700">
+                  STT
+                </TableHead>
+                <TableHead className="font-bold text-gray-700">
+                  Tên Tòa Án
+                </TableHead>
+                <TableHead className="text-center font-bold text-gray-700">
+                  Đợi tống đạt
+                </TableHead>
+                <TableHead className="text-center font-bold text-gray-700">
+                  Quá hạn
+                </TableHead>
+                <TableHead className="text-right pr-8 font-bold text-gray-700">
+                  Hành động
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {courts.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="text-center py-24 text-gray-400 italic"
+                  >
+                    Không tìm thấy tòa án nào phù hợp.
                   </TableCell>
-                  <TableCell className="font-medium py-[16px]">
-                    {court.courtName}
-                  </TableCell>
-                  <TableCell className="py-[16px]">{court.address}</TableCell>
-                  <TableCell className="py-[16px]">
-                    {court.totalUnprocessed}
-                  </TableCell>
-                  <TableCell className="py-[16px]">{court.isOverdue}</TableCell>
                 </TableRow>
-              ))}
-          </TableBody>
-
-          <TableFooter>
-            <TableRow>
-              <TableCell colSpan={3}>Total</TableCell>
-              <TableCell className="text-right">$2,500.00</TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
+              ) : (
+                courts.map((court: any, index: number) => (
+                  <TableRow
+                    key={court.id}
+                    className="group hover:bg-blue-50/30 transition-all border-b border-gray-100"
+                  >
+                    <TableCell className="text-center text-gray-400 font-medium">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="font-bold text-gray-900 uppercase tracking-wide">
+                      {court.name}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex items-center justify-center bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-full min-w-[40px]">
+                        {court.waitingCount}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span
+                        className={`inline-flex items-center justify-center font-bold px-3 py-1 rounded-full min-w-[40px] ${
+                          court.overdueCount > 0
+                            ? "bg-red-50 text-red-600"
+                            : "bg-gray-50 text-gray-400"
+                        }`}
+                      >
+                        {court.overdueCount}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <Link href={`/court/${court.id}`}>
+                        <Button
+                          variant="ghost"
+                          className="text-blue-600 font-bold hover:text-blue-800 hover:bg-blue-100/50 rounded-lg"
+                        >
+                          Chi tiết →
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
       </div>
     </div>
   );
-}
+};
+
+export default DashboardPage;

@@ -20,40 +20,46 @@ import z from "zod";
 
 const LoginPage = () => {
   const router = useRouter();
-  const [login, { loading, error }] = useMutation<
-    LoginResponse,
-    LoginVariables
-  >(LOGIN_MUTATION);
-  const handleLogin = async () => {
-    const res = await login({
-      variables: {
-        loginRequest: { email: "chuquyson123@gmail.com", password: "12345" },
-      },
-    });
-    if (res.data) {
-      setAccessToken(res.data.login.accessToken);
-      setRefreshToken(res.data.login.refreshToken);
-      setTimeout(() => {
-        router.replace("/");
-      }, 10);
-    }
-  };
+  const [login, { loading }] = useMutation<LoginResponse, LoginVariables>(
+    LOGIN_MUTATION,
+  );
 
   const loginSchema = z.object({
-    email: z.string().refine((value) => value.trim().length > 0, {
-      message: "Email is required",
-    }),
-    password: z.string().refine((value) => value.trim().length > 0, {
-      message: "Password is required",
-    }),
+    email: z.string().min(1, "Email is required"),
+    password: z.string().min(1, "Password is required"),
   });
 
   type LoginSchemaType = z.infer<typeof loginSchema>;
   const form = useForm<LoginSchemaType>({
     resolver: zodResolver(loginSchema),
     mode: "onChange",
-    reValidateMode: "onChange",
+    defaultValues: {
+      email: "",
+      password: "",
+    },
   });
+
+  // Cập nhật hàm handleLogin để nhận data từ form
+  const handleLogin = async (values: LoginSchemaType) => {
+    try {
+      const res = await login({
+        variables: {
+          loginRequest: {
+            email: values.email,
+            password: values.password,
+          },
+        },
+      });
+
+      if (res.data) {
+        setAccessToken(res.data.login.accessToken);
+        setRefreshToken(res.data.login.refreshToken);
+        router.replace("/");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+    }
+  };
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-sky-300/10 flex-col gap-4">
@@ -63,10 +69,8 @@ const LoginPage = () => {
       <Form {...form}>
         <form
           className="flex flex-col gap-4 p-4 rounded-md border w-[320px]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            form.handleSubmit(handleLogin)();
-          }}
+          // Cách viết sạch gọn hơn cho onSubmit
+          onSubmit={form.handleSubmit(handleLogin)}
         >
           <FormField
             control={form.control}
@@ -79,7 +83,7 @@ const LoginPage = () => {
                 <FormMessage />
               </FormItem>
             )}
-          ></FormField>
+          />
           <FormField
             control={form.control}
             name="password"
@@ -97,7 +101,7 @@ const LoginPage = () => {
             disabled={!form.formState.isValid || loading}
             className="flex items-center gap-2"
           >
-            {loading ? <PiSpinnerGap className="w-4 h-4 animate-spin" /> : null}
+            {loading && <PiSpinnerGap className="w-4 h-4 animate-spin" />}
             Login
           </Button>
         </form>
