@@ -14,6 +14,9 @@ import {
   CREATE_COURT,
   CREATE_OFFICIAL,
   UPDATE_ACCOUNT,
+  UPDATE_COURT_OFFICIAL,
+  DELETE_COURT_OFFICIAL,
+  DELETE_ACCOUNT, // [NEW] Import Mutation Xóa tài khoản
 } from "@/lib/graphql/mutations/management";
 
 // UI Components
@@ -58,9 +61,11 @@ import {
   HiOutlineMail,
   HiOutlineOfficeBuilding,
   HiPlus,
+  HiOutlineUserAdd,
 } from "react-icons/hi";
 import { IoBusinessOutline } from "react-icons/io5";
 import { toast } from "sonner";
+import { CREATE_ACCOUNT } from "@/lib/graphql/mutations/auth";
 
 const ManagementPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -68,10 +73,11 @@ const ManagementPage = () => {
   // --- STATE QUẢN LÝ POPUP ---
   const [isAddCourtOpen, setIsAddCourtOpen] = useState(false);
   const [isAddOfficialOpen, setIsAddOfficialOpen] = useState(false);
+  const [isEditOfficialOpen, setIsEditOfficialOpen] = useState(false);
   const [isEditAccountOpen, setIsEditAccountOpen] = useState(false);
+  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
 
   // --- STATE FORM DATA ---
-  // Đã thêm email và phone vào state
   const [newCourt, setNewCourt] = useState({
     name: "",
     address: "",
@@ -79,13 +85,29 @@ const ManagementPage = () => {
     email: "",
     phone: "",
   });
+
   const [newOfficial, setNewOfficial] = useState({
     courtId: "",
     name: "",
     title: "",
     phone: "",
   });
+
+  const [editingOfficial, setEditingOfficial] = useState({
+    id: "",
+    name: "",
+    title: "",
+    phone: "",
+  });
+
   const [editingAccount, setEditingAccount] = useState<any>(null);
+
+  const [newStaff, setNewStaff] = useState({
+    email: "",
+    fullName: "",
+    phone: "",
+    role: "STAFF",
+  });
 
   // --- API QUERIES ---
   const { data: courtData, refetch: refetchCourts } = useQuery(
@@ -133,11 +155,49 @@ const ManagementPage = () => {
     onError: (err) => toast.error(err.message),
   });
 
+  const [updateCourtOfficial] = useMutation(UPDATE_COURT_OFFICIAL, {
+    onCompleted: () => {
+      toast.success("Cập nhật cán bộ thành công!");
+      setIsEditOfficialOpen(false);
+      refetchCourts();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [deleteCourtOfficial] = useMutation(DELETE_COURT_OFFICIAL, {
+    onCompleted: () => {
+      toast.success("Xóa cán bộ thành công!");
+      refetchCourts();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const [updateAccount] = useMutation(UPDATE_ACCOUNT, {
     onCompleted: () => {
       toast.success("Cập nhật tài khoản thành công!");
       setIsEditAccountOpen(false);
       setEditingAccount(null);
+      refetchStaff();
+      refetchAll();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [createAccount] = useMutation(CREATE_ACCOUNT, {
+    onCompleted: () => {
+      toast.success("Cấp tài khoản nhân viên thành công!");
+      setIsAddStaffOpen(false);
+      setNewStaff({ email: "", fullName: "", phone: "", role: "STAFF" });
+      refetchStaff();
+      refetchAll();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // [NEW] Hook gọi API xóa mềm tài khoản
+  const [deleteAccount] = useMutation(DELETE_ACCOUNT, {
+    onCompleted: () => {
+      toast.success("Đã vô hiệu hóa tài khoản thành công!");
       refetchStaff();
       refetchAll();
     },
@@ -154,8 +214,8 @@ const ManagementPage = () => {
           name: newCourt.name,
           address: newCourt.address,
           courtNumber: parseInt(newCourt.courtNumber) || 0,
-          email: newCourt.email, // [UPDATE] Truyền thêm email
-          phone: newCourt.phone, // [UPDATE] Truyền thêm phone
+          email: newCourt.email,
+          phone: newCourt.phone,
         },
       },
     });
@@ -176,6 +236,54 @@ const ManagementPage = () => {
           name: newOfficial.name,
           title: newOfficial.title,
           phone: newOfficial.phone,
+        },
+      },
+    });
+  };
+
+  const handleOpenEditOfficial = (off: any) => {
+    setEditingOfficial({
+      id: off.id,
+      name: off.name,
+      title: off.title || "",
+      phone: off.phone || "",
+    });
+    setIsEditOfficialOpen(true);
+  };
+
+  const handleUpdateOfficial = () => {
+    if (!editingOfficial.name)
+      return toast.warning("Tên cán bộ không được để trống!");
+    updateCourtOfficial({
+      variables: {
+        input: {
+          id: editingOfficial.id,
+          name: editingOfficial.name,
+          title: editingOfficial.title,
+          phone: editingOfficial.phone,
+        },
+      },
+    });
+  };
+
+  const handleDeleteOfficial = (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa cán bộ này khỏi tòa án?")) {
+      deleteCourtOfficial({
+        variables: { id },
+      });
+    }
+  };
+
+  const handleAddStaff = () => {
+    if (!newStaff.email || !newStaff.fullName)
+      return toast.warning("Vui lòng nhập Email và Họ tên!");
+    createAccount({
+      variables: {
+        input: {
+          email: newStaff.email,
+          fullName: newStaff.fullName,
+          phone: newStaff.phone,
+          role: newStaff.role,
         },
       },
     });
@@ -205,6 +313,15 @@ const ManagementPage = () => {
         },
       },
     });
+  };
+
+  // [NEW] Handler xóa tài khoản (vô hiệu hóa)
+  const handleDeleteAccount = (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn vô hiệu hóa tài khoản này?")) {
+      deleteAccount({
+        variables: { id },
+      });
+    }
   };
 
   // --- DATA PREPARATION ---
@@ -323,6 +440,7 @@ const ManagementPage = () => {
                         <TableHead>Họ tên</TableHead>
                         <TableHead>Chức vụ</TableHead>
                         <TableHead>SĐT</TableHead>
+                        <TableHead>Trạng Thái</TableHead>
                         <TableHead className="text-right">Hành động</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -330,7 +448,7 @@ const ManagementPage = () => {
                       {court.officials?.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={4}
+                            colSpan={5}
                             className="text-center text-gray-400 italic"
                           >
                             Chưa có nhân sự nào
@@ -347,15 +465,30 @@ const ManagementPage = () => {
                             </TableCell>
                             <TableCell>{off.title}</TableCell>
                             <TableCell>{off.phone}</TableCell>
+                            <TableCell>
+                              {off.isDeleted ? (
+                                <span className="text-red-600 font-bold text-xs">
+                                  Đã ngừng hoạt động
+                                </span>
+                              ) : (
+                                <span className="text-green-600 font-bold text-xs">
+                                  Hoạt động
+                                </span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right flex justify-end gap-2">
                               <HiOutlinePencil
                                 className="cursor-pointer hover:text-blue-600"
                                 size={18}
+                                onClick={() => handleOpenEditOfficial(off)}
                               />
-                              <HiOutlineTrash
-                                className="cursor-pointer hover:text-red-600"
-                                size={18}
-                              />
+                              {!off.isDeleted && (
+                                <HiOutlineTrash
+                                  className="cursor-pointer hover:text-red-600"
+                                  size={18}
+                                  onClick={() => handleDeleteOfficial(off.id)}
+                                />
+                              )}
                             </TableCell>
                           </TableRow>
                         ))
@@ -370,11 +503,21 @@ const ManagementPage = () => {
 
         {/* === TAB 2: NHÂN VIÊN (STAFF) === */}
         <TabsContent value="staffs" className="mt-6">
+          <div className="flex justify-end mb-4">
+            <Button
+              onClick={() => setIsAddStaffOpen(true)}
+              className="bg-black text-white gap-2"
+            >
+              <HiOutlineUserAdd /> Thêm nhân viên
+            </Button>
+          </div>
+
           <div className="bg-white border rounded-xl overflow-hidden">
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
                   <TableHead>Nhân viên</TableHead>
+                  <TableHead>Họ tên</TableHead>
                   <TableHead>SĐT</TableHead>
                   <TableHead>Vai trò</TableHead>
                   <TableHead>Trạng thái</TableHead>
@@ -397,6 +540,7 @@ const ManagementPage = () => {
                         <span className="font-bold">{s.email}</span>
                       </div>
                     </TableCell>
+                    <TableCell>{s.fullName || "---"}</TableCell>
                     <TableCell>{s.phone || "---"}</TableCell>
                     <TableCell>
                       <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase">
@@ -406,7 +550,7 @@ const ManagementPage = () => {
                     <TableCell>
                       {s.isDeleted ? (
                         <span className="text-red-600 font-bold text-xs">
-                          Đã xóa
+                          Đã ngừng hoạt động
                         </span>
                       ) : (
                         <span className="text-green-600 font-bold text-xs">
@@ -420,6 +564,14 @@ const ManagementPage = () => {
                         size={18}
                         onClick={() => handleOpenEditAccount(s)}
                       />
+                      {/* [NEW] Ẩn nút xóa nếu tài khoản đã bị xóa mềm */}
+                      {!s.isDeleted && (
+                        <HiOutlineTrash
+                          className="cursor-pointer hover:text-red-600"
+                          size={18}
+                          onClick={() => handleDeleteAccount(s.id)}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -428,19 +580,26 @@ const ManagementPage = () => {
           </div>
         </TabsContent>
 
-        {/* === TAB 3: TẤT CẢ TÀI KHOẢN (FULL INFO) === */}
+        {/* === TAB 3: TẤT CẢ TÀI KHOẢN === */}
         <TabsContent value="accounts" className="mt-6">
+          <div className="flex justify-end mb-4">
+            <Button
+              onClick={() => setIsAddStaffOpen(true)}
+              className="bg-black text-white gap-2"
+            >
+              <HiOutlineUserAdd /> Cấp tài khoản mới
+            </Button>
+          </div>
+
           <div className="bg-white border rounded-xl overflow-hidden">
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
-                  {/* [UPDATE] Hiển thị đầy đủ cột */}
                   <TableHead>Tài khoản</TableHead>
                   <TableHead>Số điện thoại</TableHead>
                   <TableHead>Vai trò</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Ngày tạo</TableHead>
-                  <TableHead>Lần cuối cập nhật</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
@@ -484,17 +643,20 @@ const ManagementPage = () => {
                         ? new Date(acc.createdAt).toLocaleDateString("vi-VN")
                         : "---"}
                     </TableCell>
-                    <TableCell className="text-xs text-gray-500">
-                      {acc.updatedAt
-                        ? new Date(acc.updatedAt).toLocaleDateString("vi-VN")
-                        : "---"}
-                    </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right flex justify-end items-center gap-2">
                       <HiOutlinePencil
                         className="cursor-pointer hover:text-blue-600 inline-block"
                         size={18}
                         onClick={() => handleOpenEditAccount(acc)}
                       />
+                      {/* [NEW] Ẩn nút xóa nếu tài khoản đã bị xóa mềm */}
+                      {!acc.isDeleted && (
+                        <HiOutlineTrash
+                          className="cursor-pointer hover:text-red-600 inline-block"
+                          size={18}
+                          onClick={() => handleDeleteAccount(acc.id)}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -504,7 +666,7 @@ const ManagementPage = () => {
         </TabsContent>
       </Tabs>
 
-      {/* --- MODAL 1: THÊM TÒA ÁN (Updated: Email, Phone) --- */}
+      {/* --- MODAL 1: THÊM TÒA ÁN --- */}
       <Dialog open={isAddCourtOpen} onOpenChange={setIsAddCourtOpen}>
         <DialogContent>
           <DialogHeader>
@@ -531,8 +693,6 @@ const ManagementPage = () => {
                 placeholder="Địa chỉ tòa án"
               />
             </div>
-
-            {/* [UPDATE] Thêm 2 ô nhập này */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Email</Label>
@@ -555,7 +715,6 @@ const ManagementPage = () => {
                 />
               </div>
             </div>
-
             <div className="grid gap-2">
               <Label>Mã tòa (Số)</Label>
               <Input
@@ -606,7 +765,6 @@ const ManagementPage = () => {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="grid gap-2">
               <Label>Họ và tên</Label>
               <Input
@@ -647,6 +805,70 @@ const ManagementPage = () => {
             </Button>
             <Button onClick={handleAddOfficial} className="bg-black text-white">
               Thêm mới
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL 5: CẬP NHẬT CÁN BỘ TÒA ÁN --- */}
+      <Dialog open={isEditOfficialOpen} onOpenChange={setIsEditOfficialOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cập nhật thông tin cán bộ</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Họ và tên</Label>
+              <Input
+                value={editingOfficial.name}
+                onChange={(e) =>
+                  setEditingOfficial({
+                    ...editingOfficial,
+                    name: e.target.value,
+                  })
+                }
+                placeholder="Nhập họ tên..."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Chức vụ (Title)</Label>
+              <Input
+                value={editingOfficial.title}
+                onChange={(e) =>
+                  setEditingOfficial({
+                    ...editingOfficial,
+                    title: e.target.value,
+                  })
+                }
+                placeholder="VD: Thư ký, Thẩm phán..."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Số điện thoại</Label>
+              <Input
+                value={editingOfficial.phone}
+                onChange={(e) =>
+                  setEditingOfficial({
+                    ...editingOfficial,
+                    phone: e.target.value,
+                  })
+                }
+                placeholder="SĐT liên hệ"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditOfficialOpen(false)}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleUpdateOfficial}
+              className="bg-black text-white"
+            >
+              Lưu thay đổi
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -722,6 +944,71 @@ const ManagementPage = () => {
               className="bg-black text-white"
             >
               Lưu thay đổi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL 4: THÊM TÀI KHOẢN NHÂN VIÊN --- */}
+      <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cấp tài khoản nhân viên mới</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Họ và tên (Bắt buộc)</Label>
+              <Input
+                value={newStaff.fullName}
+                onChange={(e) =>
+                  setNewStaff({ ...newStaff, fullName: e.target.value })
+                }
+                placeholder="VD: Nguyễn Văn A"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Email đăng nhập (Bắt buộc)</Label>
+              <Input
+                type="email"
+                value={newStaff.email}
+                onChange={(e) =>
+                  setNewStaff({ ...newStaff, email: e.target.value })
+                }
+                placeholder="VD: nva@gmail.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Số điện thoại</Label>
+              <Input
+                value={newStaff.phone}
+                onChange={(e) =>
+                  setNewStaff({ ...newStaff, phone: e.target.value })
+                }
+                placeholder="VD: 0987654321"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Vai trò</Label>
+              <Select
+                value={newStaff.role}
+                onValueChange={(val) => setNewStaff({ ...newStaff, role: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn vai trò" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STAFF">Nhân viên (STAFF)</SelectItem>
+                  <SelectItem value="ADMIN">Quản trị (ADMIN)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddStaffOpen(false)}>
+              Hủy
+            </Button>
+            <Button onClick={handleAddStaff} className="bg-black text-white">
+              Cấp tài khoản
             </Button>
           </DialogFooter>
         </DialogContent>

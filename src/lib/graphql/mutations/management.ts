@@ -31,3 +31,26 @@ export const UPDATE_ACCOUNT = gql`
     }
   }
 `;
+export const UPDATE_COURT_OFFICIAL = gql`
+  mutation UpdateCourtOfficial($input: UpdateOfficialInput!) {
+    updateCourtOfficial(input: $input) {
+      id
+      name
+      title
+      phone
+    }
+  }
+`;
+
+// [NEW] Xóa Cán bộ tòa án
+export const DELETE_COURT_OFFICIAL = gql`
+  mutation DeleteCourtOfficial($id: ID!) {
+    deleteCourtOfficial(id: $id)
+  }
+`;
+
+export const DELETE_ACCOUNT = gql`
+  mutation DeleteAccount($id: ID!) {
+    deleteAccount(id: $id)
+  }
+`;

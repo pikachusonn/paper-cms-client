@@ -15,6 +15,7 @@ export const GET_COURTS_WITH_OFFICIALS = gql`
         name
         title
         phone
+        isDeleted
       }
     }
   }
@@ -26,6 +27,7 @@ export const GET_STAFF_ACCOUNTS = gql`
     getStaffAccounts(search: $search) {
       id
       email
+      fullName
       avatar
       role
       phone

@@ -9,3 +9,11 @@ export const LOGIN_MUTATION = gql`
         }
     }
 `
+export const CREATE_ACCOUNT = gql`
+  mutation CreateAccount($input: CreateAccountInput!) {
+    createAccount(input: $input) {
+      id
+      email
+    }
+  }
+`;
