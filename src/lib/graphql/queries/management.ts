@@ -36,6 +36,20 @@ export const GET_STAFF_ACCOUNTS = gql`
   }
 `;
 
+export const GET_ADMIN_ACCOUNTS = gql`
+  query GetAdminAccounts($search: String) {
+    getAdminAccounts(search: $search) {
+      id
+      email
+      fullName
+      avatar
+      role
+      phone
+      isDeleted
+    }
+  }
+`;
+
 // Tab 3: Lấy Tất cả Tài khoản (Có Filter & Pagination)
 export const GET_ALL_ACCOUNTS_PAGINATED = gql`
   query GetAllAccounts($filter: AccountFilterInput) {

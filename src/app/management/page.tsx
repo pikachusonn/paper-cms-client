@@ -4,11 +4,10 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
-// Import Query/Mutation sếp đã tự làm
 import {
   GET_COURTS_WITH_OFFICIALS,
   GET_STAFF_ACCOUNTS,
-  GET_ALL_ACCOUNTS_PAGINATED,
+  GET_ADMIN_ACCOUNTS,
 } from "@/lib/graphql/queries/management";
 import {
   CREATE_COURT,
@@ -16,10 +15,8 @@ import {
   UPDATE_ACCOUNT,
   UPDATE_COURT_OFFICIAL,
   DELETE_COURT_OFFICIAL,
-  DELETE_ACCOUNT, // [NEW] Import Mutation Xóa tài khoản
+  DELETE_ACCOUNT,
 } from "@/lib/graphql/mutations/management";
-
-// UI Components
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Accordion,
@@ -62,6 +59,7 @@ import {
   HiOutlineOfficeBuilding,
   HiPlus,
   HiOutlineUserAdd,
+  HiOutlineShieldCheck,
 } from "react-icons/hi";
 import { IoBusinessOutline } from "react-icons/io5";
 import { toast } from "sonner";
@@ -69,6 +67,7 @@ import { CREATE_ACCOUNT } from "@/lib/graphql/mutations/auth";
 
 const ManagementPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("courts");
 
   // --- STATE QUẢN LÝ POPUP ---
   const [isAddCourtOpen, setIsAddCourtOpen] = useState(false);
@@ -85,23 +84,19 @@ const ManagementPage = () => {
     email: "",
     phone: "",
   });
-
   const [newOfficial, setNewOfficial] = useState({
     courtId: "",
     name: "",
     title: "",
     phone: "",
   });
-
   const [editingOfficial, setEditingOfficial] = useState({
     id: "",
     name: "",
     title: "",
     phone: "",
   });
-
   const [editingAccount, setEditingAccount] = useState<any>(null);
-
   const [newStaff, setNewStaff] = useState({
     email: "",
     fullName: "",
@@ -112,54 +107,91 @@ const ManagementPage = () => {
   // --- API QUERIES ---
   const { data: courtData, refetch: refetchCourts } = useQuery(
     GET_COURTS_WITH_OFFICIALS,
+    { skip: activeTab !== "courts" },
   );
-
   const { data: staffData, refetch: refetchStaff } = useQuery(
     GET_STAFF_ACCOUNTS,
+    { variables: { search: searchTerm }, skip: activeTab !== "staffs" },
+  );
+  const { data: adminData, refetch: refetchAdmins } = useQuery(
+    GET_ADMIN_ACCOUNTS,
+    { variables: { search: searchTerm }, skip: activeTab !== "admins" },
+  );
+
+  // --- API MUTATIONS (KÈM LOADING STATE ĐỂ CHẶN SPAM) ---
+  const [createCourt, { loading: isCreatingCourt }] = useMutation(
+    CREATE_COURT,
     {
-      variables: { search: searchTerm },
+      onCompleted: () => {
+        toast.success("Thêm tòa án thành công!");
+        setIsAddCourtOpen(false);
+        setNewCourt({
+          name: "",
+          address: "",
+          courtNumber: "",
+          email: "",
+          phone: "",
+        });
+        refetchCourts();
+      },
+      onError: (err) => toast.error(err.message),
     },
   );
 
-  const { data: allAccountData, refetch: refetchAll } = useQuery(
-    GET_ALL_ACCOUNTS_PAGINATED,
+  const [createOfficial, { loading: isCreatingOfficial }] = useMutation(
+    CREATE_OFFICIAL,
     {
-      variables: { filter: { page: 1, limit: 10 } },
+      onCompleted: () => {
+        toast.success("Thêm cán bộ thành công!");
+        setIsAddOfficialOpen(false);
+        setNewOfficial({ courtId: "", name: "", title: "", phone: "" });
+        refetchCourts();
+      },
+      onError: (err) => toast.error(err.message),
     },
   );
 
-  // --- API MUTATIONS ---
-  const [createCourt] = useMutation(CREATE_COURT, {
-    onCompleted: () => {
-      toast.success("Thêm tòa án thành công!");
-      setIsAddCourtOpen(false);
-      setNewCourt({
-        name: "",
-        address: "",
-        courtNumber: "",
-        email: "",
-        phone: "",
-      });
-      refetchCourts();
+  const [updateCourtOfficial, { loading: isUpdatingOfficial }] = useMutation(
+    UPDATE_COURT_OFFICIAL,
+    {
+      onCompleted: () => {
+        toast.success("Cập nhật cán bộ thành công!");
+        setIsEditOfficialOpen(false);
+        refetchCourts();
+      },
+      onError: (err) => toast.error(err.message),
     },
-    onError: (err) => toast.error(err.message),
-  });
+  );
 
-  const [createOfficial] = useMutation(CREATE_OFFICIAL, {
-    onCompleted: () => {
-      toast.success("Thêm cán bộ thành công!");
-      setIsAddOfficialOpen(false);
-      setNewOfficial({ courtId: "", name: "", title: "", phone: "" });
-      refetchCourts();
+  const [updateAccount, { loading: isUpdatingAccount }] = useMutation(
+    UPDATE_ACCOUNT,
+    {
+      onCompleted: () => {
+        toast.success("Cập nhật tài khoản thành công!");
+        setIsEditAccountOpen(false);
+        activeTab === "staffs" ? refetchStaff() : refetchAdmins();
+      },
+      onError: (err) => toast.error(err.message),
     },
-    onError: (err) => toast.error(err.message),
-  });
+  );
 
-  const [updateCourtOfficial] = useMutation(UPDATE_COURT_OFFICIAL, {
+  const [createAccount, { loading: isCreatingAccount }] = useMutation(
+    CREATE_ACCOUNT,
+    {
+      onCompleted: () => {
+        toast.success("Cấp tài khoản mới thành công!");
+        setIsAddStaffOpen(false);
+        setNewStaff({ email: "", fullName: "", phone: "", role: "STAFF" });
+        activeTab === "staffs" ? refetchStaff() : refetchAdmins();
+      },
+      onError: (err) => toast.error(err.message),
+    },
+  );
+
+  const [deleteAccount] = useMutation(DELETE_ACCOUNT, {
     onCompleted: () => {
-      toast.success("Cập nhật cán bộ thành công!");
-      setIsEditOfficialOpen(false);
-      refetchCourts();
+      toast.success("Đã vô hiệu hóa tài khoản!");
+      activeTab === "staffs" ? refetchStaff() : refetchAdmins();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -172,50 +204,38 @@ const ManagementPage = () => {
     onError: (err) => toast.error(err.message),
   });
 
-  const [updateAccount] = useMutation(UPDATE_ACCOUNT, {
-    onCompleted: () => {
-      toast.success("Cập nhật tài khoản thành công!");
-      setIsEditAccountOpen(false);
-      setEditingAccount(null);
-      refetchStaff();
-      refetchAll();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const [createAccount] = useMutation(CREATE_ACCOUNT, {
-    onCompleted: () => {
-      toast.success("Cấp tài khoản nhân viên thành công!");
-      setIsAddStaffOpen(false);
-      setNewStaff({ email: "", fullName: "", phone: "", role: "STAFF" });
-      refetchStaff();
-      refetchAll();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  // [NEW] Hook gọi API xóa mềm tài khoản
-  const [deleteAccount] = useMutation(DELETE_ACCOUNT, {
-    onCompleted: () => {
-      toast.success("Đã vô hiệu hóa tài khoản thành công!");
-      refetchStaff();
-      refetchAll();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
   // --- HANDLERS ---
+  const handleOpenAddStaff = (role: "STAFF" | "ADMIN") => {
+    setNewStaff({ ...newStaff, role });
+    setIsAddStaffOpen(true);
+  };
+
+  const handleOpenEditAccount = (account: any) => {
+    setEditingAccount({
+      id: account.id,
+      name: account.fullName || account.email.split("@")[0],
+      phone: account.phone || "",
+      role: account.role,
+      avatar: account.avatar || "",
+    });
+    setIsEditAccountOpen(true);
+  };
+
+  const handleDeleteAccount = (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn vô hiệu hóa tài khoản này?")) {
+      deleteAccount({ variables: { id } });
+    }
+  };
+
   const handleAddCourt = () => {
+    if (isCreatingCourt) return;
     if (!newCourt.name || !newCourt.address)
       return toast.warning("Vui lòng nhập tên và địa chỉ tòa!");
     createCourt({
       variables: {
         input: {
-          name: newCourt.name,
-          address: newCourt.address,
+          ...newCourt,
           courtNumber: parseInt(newCourt.courtNumber) || 0,
-          email: newCourt.email,
-          phone: newCourt.phone,
         },
       },
     });
@@ -227,161 +247,193 @@ const ManagementPage = () => {
   };
 
   const handleAddOfficial = () => {
+    if (isCreatingOfficial) return;
     if (!newOfficial.name || !newOfficial.courtId)
       return toast.warning("Vui lòng chọn Tòa án và nhập tên!");
-    createOfficial({
-      variables: {
-        input: {
-          courtId: newOfficial.courtId,
-          name: newOfficial.name,
-          title: newOfficial.title,
-          phone: newOfficial.phone,
-        },
-      },
-    });
-  };
-
-  const handleOpenEditOfficial = (off: any) => {
-    setEditingOfficial({
-      id: off.id,
-      name: off.name,
-      title: off.title || "",
-      phone: off.phone || "",
-    });
-    setIsEditOfficialOpen(true);
+    createOfficial({ variables: { input: newOfficial } });
   };
 
   const handleUpdateOfficial = () => {
+    if (isUpdatingOfficial) return;
     if (!editingOfficial.name)
       return toast.warning("Tên cán bộ không được để trống!");
-    updateCourtOfficial({
-      variables: {
-        input: {
-          id: editingOfficial.id,
-          name: editingOfficial.name,
-          title: editingOfficial.title,
-          phone: editingOfficial.phone,
-        },
-      },
-    });
+    updateCourtOfficial({ variables: { input: editingOfficial } });
   };
 
   const handleDeleteOfficial = (id: string) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa cán bộ này khỏi tòa án?")) {
-      deleteCourtOfficial({
-        variables: { id },
-      });
+      deleteCourtOfficial({ variables: { id } });
     }
   };
 
   const handleAddStaff = () => {
+    if (isCreatingAccount) return;
     if (!newStaff.email || !newStaff.fullName)
       return toast.warning("Vui lòng nhập Email và Họ tên!");
-    createAccount({
-      variables: {
-        input: {
-          email: newStaff.email,
-          fullName: newStaff.fullName,
-          phone: newStaff.phone,
-          role: newStaff.role,
-        },
-      },
-    });
-  };
-
-  const handleOpenEditAccount = (account: any) => {
-    setEditingAccount({
-      id: account.id,
-      name: account.email.split("@")[0],
-      phone: account.phone || "",
-      role: account.role,
-      avatar: account.avatar || "",
-    });
-    setIsEditAccountOpen(true);
+    createAccount({ variables: { input: newStaff } });
   };
 
   const handleUpdateAccount = () => {
+    if (isUpdatingAccount) return;
     if (!editingAccount) return;
-    updateAccount({
-      variables: {
-        input: {
-          id: editingAccount.id,
-          name: editingAccount.name,
-          phone: editingAccount.phone,
-          role: editingAccount.role,
-          avatar: editingAccount.avatar,
-        },
-      },
-    });
-  };
-
-  // [NEW] Handler xóa tài khoản (vô hiệu hóa)
-  const handleDeleteAccount = (id: string) => {
-    if (window.confirm("Bạn có chắc chắn muốn vô hiệu hóa tài khoản này?")) {
-      deleteAccount({
-        variables: { id },
-      });
-    }
+    updateAccount({ variables: { input: editingAccount } });
   };
 
   // --- DATA PREPARATION ---
   const courts = courtData?.courts || [];
   const staffs = staffData?.getStaffAccounts || [];
-  const accounts = allAccountData?.getAllAccounts?.data || [];
+  const admins = adminData?.getAdminAccounts || [];
+
+  // Reusable Spinner Component
+  const LoadingSpinner = ({ text }: { text: string }) => (
+    <div className="flex items-center gap-2">
+      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      <span>{text}</span>
+    </div>
+  );
+
+  // Helper render bảng
+  const renderAccountTable = (data: any[]) => (
+    <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+      <Table>
+        <TableHeader className="bg-gray-50">
+          <TableRow>
+            <TableHead>Tài khoản</TableHead>
+            <TableHead>Họ tên</TableHead>
+            <TableHead>SĐT</TableHead>
+            <TableHead>Trạng thái</TableHead>
+            <TableHead className="text-right">Hành động</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={5}
+                className="text-center py-10 text-gray-400 italic"
+              >
+                Không tìm thấy dữ liệu phù hợp
+              </TableCell>
+            </TableRow>
+          ) : (
+            data.map((acc: any) => (
+              <TableRow key={acc.id} className="hover:bg-gray-50/50">
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={
+                        acc.avatar || "https://ui.shadcn.com/avatars/shadcn.jpg"
+                      }
+                      alt="ava"
+                      className="w-8 h-8 rounded-full border shadow-sm"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800">
+                        {acc.email}
+                      </span>
+                      <span className="text-[10px] uppercase font-bold text-blue-500">
+                        {acc.role}
+                      </span>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="font-medium">
+                  {acc.fullName || "---"}
+                </TableCell>
+                <TableCell>{acc.phone || "---"}</TableCell>
+                <TableCell>
+                  {acc.isDeleted ? (
+                    <span className="bg-red-50 text-red-600 px-2 py-1 rounded-full text-[10px] font-bold border border-red-100">
+                      Đã vô hiệu
+                    </span>
+                  ) : (
+                    <span className="bg-green-50 text-green-600 px-2 py-1 rounded-full text-[10px] font-bold border border-green-100">
+                      Hoạt động
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-3 items-center">
+                    <HiOutlinePencil
+                      className="cursor-pointer text-gray-400 hover:text-blue-600"
+                      size={18}
+                      onClick={() => handleOpenEditAccount(acc)}
+                    />
+                    {!acc.isDeleted && (
+                      <HiOutlineTrash
+                        className="cursor-pointer text-gray-400 hover:text-red-600"
+                        size={18}
+                        onClick={() => handleDeleteAccount(acc.id)}
+                      />
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     <div className="p-8 flex flex-col gap-6 bg-[#f8f9fa] min-h-screen">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Quản lý dữ liệu</h1>
-        <div className="relative w-[300px]">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+          Quản lý dữ liệu
+        </h1>
+        <div className="relative w-[320px]">
           <CiSearch
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             size={20}
           />
           <Input
-            placeholder="Tìm kiếm..."
-            className="pl-10 bg-white"
+            placeholder="Tìm kiếm tài khoản, tòa án..."
+            className="pl-10 bg-white border-gray-200 focus:ring-black rounded-lg"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      <Tabs defaultValue="courts" className="w-full">
+      <Tabs
+        defaultValue="courts"
+        className="w-full"
+        onValueChange={setActiveTab}
+      >
         <TabsList className="bg-transparent border-b w-full justify-start h-auto p-0 gap-8">
           <TabsTrigger
             value="courts"
-            className="data-[state=active]:border-black border-b-2 border-transparent px-0 pb-2 font-bold text-gray-500 rounded-none"
+            className="data-[state=active]:border-black data-[state=active]:text-black border-b-2 border-transparent px-0 pb-3 font-bold text-gray-400 rounded-none transition-all"
           >
-            Tòa án
+            Tòa án & Cán bộ
           </TabsTrigger>
           <TabsTrigger
             value="staffs"
-            className="data-[state=active]:border-black border-b-2 border-transparent px-0 pb-2 font-bold text-gray-500 rounded-none"
+            className="data-[state=active]:border-black data-[state=active]:text-black border-b-2 border-transparent px-0 pb-3 font-bold text-gray-400 rounded-none transition-all"
           >
             Nhân viên nhập liệu
           </TabsTrigger>
           <TabsTrigger
-            value="accounts"
-            className="data-[state=active]:border-black border-b-2 border-transparent px-0 pb-2 font-bold text-gray-500 rounded-none"
+            value="admins"
+            className="data-[state=active]:border-black data-[state=active]:text-black border-b-2 border-transparent px-0 pb-3 font-bold text-gray-400 rounded-none transition-all"
           >
-            Tất cả tài khoản
+            Quản trị (Admin)
           </TabsTrigger>
         </TabsList>
 
-        {/* === TAB 1: TÒA ÁN === */}
-        <TabsContent value="courts" className="mt-6">
-          <div className="flex justify-end mb-4 gap-2">
+        <TabsContent value="courts" className="mt-6 outline-none">
+          <div className="flex justify-end mb-4 gap-3">
             <Button
               onClick={() => handleOpenAddOfficial("")}
               variant="outline"
-              className="gap-2"
+              className="gap-2 rounded-lg"
             >
               <HiPlus /> Thêm cán bộ
             </Button>
             <Button
               onClick={() => setIsAddCourtOpen(true)}
-              className="bg-black text-white gap-2"
+              className="bg-black text-white gap-2 rounded-lg"
             >
               <IoBusinessOutline /> Thêm tòa án
             </Button>
@@ -391,21 +443,23 @@ const ManagementPage = () => {
               <AccordionItem
                 key={court.id}
                 value={court.id}
-                className="bg-white border rounded-xl overflow-hidden shadow-sm"
+                className="bg-white border rounded-xl overflow-hidden shadow-sm border-gray-200"
               >
-                <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-gray-50">
+                <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-gray-50/50">
                   <div className="flex items-center gap-4 w-full">
-                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
+                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
                       <IoBusinessOutline size={20} />
                     </div>
                     <div className="text-left flex-1">
                       <p className="font-bold text-gray-900">{court.name}</p>
-                      <p className="text-xs text-gray-500">{court.address}</p>
+                      <p className="text-xs text-gray-500 font-medium">
+                        {court.address}
+                      </p>
                     </div>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent className="px-6 pb-4 pt-2">
-                  <div className="grid grid-cols-3 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border text-sm">
+                <AccordionContent className="px-6 pb-6 pt-2">
+                  <div className="grid grid-cols-3 gap-4 mb-6 bg-gray-50/80 p-4 rounded-xl border border-gray-100 text-sm">
                     <div className="flex items-center gap-2 text-gray-600">
                       <HiOutlineMail size={16} />{" "}
                       <span>{court.email || "---"}</span>
@@ -419,24 +473,23 @@ const ManagementPage = () => {
                       <span>Mã tòa: {court.courtNumber}</span>
                     </div>
                   </div>
-
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-bold text-sm text-gray-800">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-sm text-gray-800 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>{" "}
                       Danh sách Cán bộ tòa án
                     </h4>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="gap-1 h-8"
+                      className="gap-1 h-8 text-xs font-bold"
                       onClick={() => handleOpenAddOfficial(court.id)}
                     >
-                      <HiPlus /> Thêm vào tòa này
+                      <HiPlus /> Thêm nhân sự
                     </Button>
                   </div>
-
                   <Table>
                     <TableHeader>
-                      <TableRow className="hover:bg-transparent border-b">
+                      <TableRow className="bg-transparent border-b">
                         <TableHead>Họ tên</TableHead>
                         <TableHead>Chức vụ</TableHead>
                         <TableHead>SĐT</TableHead>
@@ -449,7 +502,7 @@ const ManagementPage = () => {
                         <TableRow>
                           <TableCell
                             colSpan={5}
-                            className="text-center text-gray-400 italic"
+                            className="text-center text-gray-400 italic py-8"
                           >
                             Chưa có nhân sự nào
                           </TableCell>
@@ -458,21 +511,23 @@ const ManagementPage = () => {
                         court.officials.map((off: any) => (
                           <TableRow
                             key={off.id}
-                            className="border-none hover:bg-gray-50"
+                            className="border-none hover:bg-gray-50/50"
                           >
-                            <TableCell className="font-medium">
+                            <TableCell className="font-bold text-gray-700">
                               {off.name}
                             </TableCell>
-                            <TableCell>{off.title}</TableCell>
+                            <TableCell className="text-gray-500">
+                              {off.title}
+                            </TableCell>
                             <TableCell>{off.phone}</TableCell>
                             <TableCell>
                               {off.isDeleted ? (
-                                <span className="text-red-600 font-bold text-xs">
-                                  Đã ngừng hoạt động
+                                <span className="text-red-500 font-bold text-[10px]">
+                                  NGỪNG HĐ
                                 </span>
                               ) : (
-                                <span className="text-green-600 font-bold text-xs">
-                                  Hoạt động
+                                <span className="text-green-500 font-bold text-[10px]">
+                                  HOẠT ĐỘNG
                                 </span>
                               )}
                             </TableCell>
@@ -501,168 +556,28 @@ const ManagementPage = () => {
           </Accordion>
         </TabsContent>
 
-        {/* === TAB 2: NHÂN VIÊN (STAFF) === */}
-        <TabsContent value="staffs" className="mt-6">
+        <TabsContent value="staffs" className="mt-6 outline-none">
           <div className="flex justify-end mb-4">
             <Button
-              onClick={() => setIsAddStaffOpen(true)}
-              className="bg-black text-white gap-2"
+              onClick={() => handleOpenAddStaff("STAFF")}
+              className="bg-black text-white gap-2 rounded-lg"
             >
               <HiOutlineUserAdd /> Thêm nhân viên
             </Button>
           </div>
-
-          <div className="bg-white border rounded-xl overflow-hidden">
-            <Table>
-              <TableHeader className="bg-gray-50">
-                <TableRow>
-                  <TableHead>Nhân viên</TableHead>
-                  <TableHead>Họ tên</TableHead>
-                  <TableHead>SĐT</TableHead>
-                  <TableHead>Vai trò</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {staffs.map((s: any) => (
-                  <TableRow key={s.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={
-                            s.avatar ||
-                            "https://ui.shadcn.com/avatars/shadcn.jpg"
-                          }
-                          alt="ava"
-                          className="w-8 h-8 rounded-full border"
-                        />{" "}
-                        <span className="font-bold">{s.email}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{s.fullName || "---"}</TableCell>
-                    <TableCell>{s.phone || "---"}</TableCell>
-                    <TableCell>
-                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase">
-                        {s.role}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {s.isDeleted ? (
-                        <span className="text-red-600 font-bold text-xs">
-                          Đã ngừng hoạt động
-                        </span>
-                      ) : (
-                        <span className="text-green-600 font-bold text-xs">
-                          Hoạt động
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right flex justify-end gap-2">
-                      <HiOutlinePencil
-                        className="cursor-pointer hover:text-blue-600"
-                        size={18}
-                        onClick={() => handleOpenEditAccount(s)}
-                      />
-                      {/* [NEW] Ẩn nút xóa nếu tài khoản đã bị xóa mềm */}
-                      {!s.isDeleted && (
-                        <HiOutlineTrash
-                          className="cursor-pointer hover:text-red-600"
-                          size={18}
-                          onClick={() => handleDeleteAccount(s.id)}
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          {renderAccountTable(staffs)}
         </TabsContent>
 
-        {/* === TAB 3: TẤT CẢ TÀI KHOẢN === */}
-        <TabsContent value="accounts" className="mt-6">
+        <TabsContent value="admins" className="mt-6 outline-none">
           <div className="flex justify-end mb-4">
             <Button
-              onClick={() => setIsAddStaffOpen(true)}
-              className="bg-black text-white gap-2"
+              onClick={() => handleOpenAddStaff("ADMIN")}
+              className="bg-blue-600 hover:bg-blue-700 text-white gap-2 rounded-lg"
             >
-              <HiOutlineUserAdd /> Cấp tài khoản mới
+              <HiOutlineShieldCheck /> Cấp quyền Admin
             </Button>
           </div>
-
-          <div className="bg-white border rounded-xl overflow-hidden">
-            <Table>
-              <TableHeader className="bg-gray-50">
-                <TableRow>
-                  <TableHead>Tài khoản</TableHead>
-                  <TableHead>Số điện thoại</TableHead>
-                  <TableHead>Vai trò</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Ngày tạo</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {accounts.map((acc: any) => (
-                  <TableRow key={acc.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={
-                            acc.avatar ||
-                            "https://ui.shadcn.com/avatars/shadcn.jpg"
-                          }
-                          alt="ava"
-                          className="w-8 h-8 rounded-full border"
-                        />
-                        <span className="font-bold text-gray-800">
-                          {acc.email}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{acc.phone || "---"}</TableCell>
-                    <TableCell>
-                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold uppercase">
-                        {acc.role}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {acc.isDeleted ? (
-                        <span className="bg-red-50 text-red-600 px-2 py-1 rounded-full text-xs font-bold border border-red-200">
-                          Đã xóa
-                        </span>
-                      ) : (
-                        <span className="bg-green-50 text-green-600 px-2 py-1 rounded-full text-xs font-bold border border-green-200">
-                          Hoạt động
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-500">
-                      {acc.createdAt
-                        ? new Date(acc.createdAt).toLocaleDateString("vi-VN")
-                        : "---"}
-                    </TableCell>
-                    <TableCell className="text-right flex justify-end items-center gap-2">
-                      <HiOutlinePencil
-                        className="cursor-pointer hover:text-blue-600 inline-block"
-                        size={18}
-                        onClick={() => handleOpenEditAccount(acc)}
-                      />
-                      {/* [NEW] Ẩn nút xóa nếu tài khoản đã bị xóa mềm */}
-                      {!acc.isDeleted && (
-                        <HiOutlineTrash
-                          className="cursor-pointer hover:text-red-600 inline-block"
-                          size={18}
-                          onClick={() => handleDeleteAccount(acc.id)}
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          {renderAccountTable(admins)}
         </TabsContent>
       </Tabs>
 
@@ -728,17 +643,29 @@ const ManagementPage = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddCourtOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsAddCourtOpen(false)}
+              disabled={isCreatingCourt}
+            >
               Hủy
             </Button>
-            <Button onClick={handleAddCourt} className="bg-black text-white">
-              Thêm mới
+            <Button
+              onClick={handleAddCourt}
+              className="bg-black text-white min-w-[120px]"
+              disabled={isCreatingCourt}
+            >
+              {isCreatingCourt ? (
+                <LoadingSpinner text="Đang thêm..." />
+              ) : (
+                "Thêm mới"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL 2: THÊM CÁN BỘ (OFFICIAL) --- */}
+      {/* --- MODAL 2: THÊM CÁN BỘ --- */}
       <Dialog open={isAddOfficialOpen} onOpenChange={setIsAddOfficialOpen}>
         <DialogContent>
           <DialogHeader>
@@ -776,17 +703,17 @@ const ManagementPage = () => {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Chức vụ (Title)</Label>
+              <Label>Chức vụ</Label>
               <Input
                 value={newOfficial.title}
                 onChange={(e) =>
                   setNewOfficial({ ...newOfficial, title: e.target.value })
                 }
-                placeholder="VD: Thư ký, Thẩm phán..."
+                placeholder="VD: Thư ký..."
               />
             </div>
             <div className="grid gap-2">
-              <Label>Số điện thoại</Label>
+              <Label>SĐT</Label>
               <Input
                 value={newOfficial.phone}
                 onChange={(e) =>
@@ -800,17 +727,26 @@ const ManagementPage = () => {
             <Button
               variant="outline"
               onClick={() => setIsAddOfficialOpen(false)}
+              disabled={isCreatingOfficial}
             >
               Hủy
             </Button>
-            <Button onClick={handleAddOfficial} className="bg-black text-white">
-              Thêm mới
+            <Button
+              onClick={handleAddOfficial}
+              className="bg-black text-white min-w-[120px]"
+              disabled={isCreatingOfficial}
+            >
+              {isCreatingOfficial ? (
+                <LoadingSpinner text="Đang thêm..." />
+              ) : (
+                "Thêm mới"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL 5: CẬP NHẬT CÁN BỘ TÒA ÁN --- */}
+      {/* --- MODAL 3: SỬA CÁN BỘ --- */}
       <Dialog open={isEditOfficialOpen} onOpenChange={setIsEditOfficialOpen}>
         <DialogContent>
           <DialogHeader>
@@ -827,11 +763,10 @@ const ManagementPage = () => {
                     name: e.target.value,
                   })
                 }
-                placeholder="Nhập họ tên..."
               />
             </div>
             <div className="grid gap-2">
-              <Label>Chức vụ (Title)</Label>
+              <Label>Chức vụ</Label>
               <Input
                 value={editingOfficial.title}
                 onChange={(e) =>
@@ -840,7 +775,6 @@ const ManagementPage = () => {
                     title: e.target.value,
                   })
                 }
-                placeholder="VD: Thư ký, Thẩm phán..."
               />
             </div>
             <div className="grid gap-2">
@@ -853,7 +787,6 @@ const ManagementPage = () => {
                     phone: e.target.value,
                   })
                 }
-                placeholder="SĐT liên hệ"
               />
             </div>
           </div>
@@ -861,20 +794,112 @@ const ManagementPage = () => {
             <Button
               variant="outline"
               onClick={() => setIsEditOfficialOpen(false)}
+              disabled={isUpdatingOfficial}
             >
               Hủy
             </Button>
             <Button
               onClick={handleUpdateOfficial}
-              className="bg-black text-white"
+              className="bg-black text-white min-w-[140px]"
+              disabled={isUpdatingOfficial}
             >
-              Lưu thay đổi
+              {isUpdatingOfficial ? (
+                <LoadingSpinner text="Đang cập nhật..." />
+              ) : (
+                "Lưu thay đổi"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL 3: SỬA TÀI KHOẢN --- */}
+      {/* --- MODAL 4: CẤP TÀI KHOẢN (TRỌNG TÂM) --- */}
+      <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">
+              Cấp tài khoản{" "}
+              {newStaff.role === "ADMIN" ? "Quản trị" : "Nhân viên"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-5 py-4">
+            <div className="grid gap-2">
+              <Label className="font-bold">Họ và tên</Label>
+              <Input
+                value={newStaff.fullName}
+                onChange={(e) =>
+                  setNewStaff({ ...newStaff, fullName: e.target.value })
+                }
+                placeholder="VD: Nguyễn Văn A"
+                className="rounded-lg"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="font-bold">Email đăng nhập</Label>
+              <Input
+                type="email"
+                value={newStaff.email}
+                onChange={(e) =>
+                  setNewStaff({ ...newStaff, email: e.target.value })
+                }
+                placeholder="VD: nva@gmail.com"
+                className="rounded-lg"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="font-bold">Số điện thoại</Label>
+              <Input
+                value={newStaff.phone}
+                onChange={(e) =>
+                  setNewStaff({ ...newStaff, phone: e.target.value })
+                }
+                placeholder="VD: 0987654321"
+                className="rounded-lg"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="font-bold">Vai trò</Label>
+              <Select
+                value={newStaff.role}
+                onValueChange={(val: any) =>
+                  setNewStaff({ ...newStaff, role: val })
+                }
+              >
+                <SelectTrigger className="rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STAFF">Nhân viên (STAFF)</SelectItem>
+                  <SelectItem value="ADMIN">Quản trị (ADMIN)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsAddStaffOpen(false)}
+              className="rounded-lg"
+              disabled={isCreatingAccount}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleAddStaff}
+              className="bg-black text-white rounded-lg px-8 min-w-[160px]"
+              disabled={isCreatingAccount}
+            >
+              {isCreatingAccount ? (
+                <LoadingSpinner text="Đang cấp TK..." />
+              ) : (
+                "Cấp tài khoản"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL 5: SỬA TÀI KHOẢN --- */}
       <Dialog open={isEditAccountOpen} onOpenChange={setIsEditAccountOpen}>
         <DialogContent>
           <DialogHeader>
@@ -911,7 +936,7 @@ const ManagementPage = () => {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Chọn vai trò" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ADMIN">ADMIN</SelectItem>
@@ -919,96 +944,25 @@ const ManagementPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label>Avatar URL</Label>
-              <Input
-                value={editingAccount?.avatar || ""}
-                onChange={(e) =>
-                  setEditingAccount({
-                    ...editingAccount,
-                    avatar: e.target.value,
-                  })
-                }
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setIsEditAccountOpen(false)}
+              disabled={isUpdatingAccount}
             >
               Hủy
             </Button>
             <Button
               onClick={handleUpdateAccount}
-              className="bg-black text-white"
+              className="bg-black text-white min-w-[140px]"
+              disabled={isUpdatingAccount}
             >
-              Lưu thay đổi
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* --- MODAL 4: THÊM TÀI KHOẢN NHÂN VIÊN --- */}
-      <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cấp tài khoản nhân viên mới</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Họ và tên (Bắt buộc)</Label>
-              <Input
-                value={newStaff.fullName}
-                onChange={(e) =>
-                  setNewStaff({ ...newStaff, fullName: e.target.value })
-                }
-                placeholder="VD: Nguyễn Văn A"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Email đăng nhập (Bắt buộc)</Label>
-              <Input
-                type="email"
-                value={newStaff.email}
-                onChange={(e) =>
-                  setNewStaff({ ...newStaff, email: e.target.value })
-                }
-                placeholder="VD: nva@gmail.com"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Số điện thoại</Label>
-              <Input
-                value={newStaff.phone}
-                onChange={(e) =>
-                  setNewStaff({ ...newStaff, phone: e.target.value })
-                }
-                placeholder="VD: 0987654321"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Vai trò</Label>
-              <Select
-                value={newStaff.role}
-                onValueChange={(val) => setNewStaff({ ...newStaff, role: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn vai trò" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="STAFF">Nhân viên (STAFF)</SelectItem>
-                  <SelectItem value="ADMIN">Quản trị (ADMIN)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddStaffOpen(false)}>
-              Hủy
-            </Button>
-            <Button onClick={handleAddStaff} className="bg-black text-white">
-              Cấp tài khoản
+              {isUpdatingAccount ? (
+                <LoadingSpinner text="Đang lưu..." />
+              ) : (
+                "Lưu thay đổi"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
