@@ -1,44 +1,36 @@
-"use client"
-import { getRefreshToken } from "@/helper/token.helper"
-import { apolloClient } from "@/lib/apollo/client"
-import { ApolloProvider } from "@apollo/client/react"
-import { usePathname } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+"use client";
+import { getRefreshToken } from "@/helper/token.helper";
+import { apolloClient } from "@/lib/apollo/client";
+import { ApolloProvider } from "@apollo/client/react";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
-    const [initialize, setInitialize] = useState(false);
-    const pathname = usePathname();
-    const refreshToken = useMemo(() => getRefreshToken(), [getRefreshToken])
+  const [initialize, setInitialize] = useState(false);
+  const pathname = usePathname();
+  const refreshToken = useMemo(() => getRefreshToken(), []);
+  const isPublicRoute = pathname?.startsWith("/public-import");
+  const isAuthRoute = pathname === "/login";
 
-    const isPublicRoute = false;
-    const isAuthRoute = pathname === "/login"
+  useEffect(() => {
+    const init = () => {
+      if (!isPublicRoute && !isAuthRoute && !refreshToken) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!!refreshToken && isAuthRoute) {
+        console.log("heheh");
+        window.location.href = "/";
+        return;
+      }
 
-    useEffect(() => {
-        const initialize = () => {
-            if (!isPublicRoute && !isAuthRoute && !refreshToken) {
-                window.location.href = "/login";
-                return;
-            }
+      setInitialize(true);
+    };
 
-            if (!!refreshToken && (isAuthRoute || isPublicRoute)) {
-                console.log("heheh");
-                
-                window.location.href = "/";
-                return;
-            }
+    init();
+  }, [isPublicRoute, isAuthRoute, refreshToken]);
 
-            setInitialize(true);
-        }
+  if (!initialize) return null;
 
-        initialize();
-
-    }, [isPublicRoute, isAuthRoute, refreshToken])
-
-    if (!initialize) return null;
-
-    return (
-        <ApolloProvider client={apolloClient}>
-            {children}
-        </ApolloProvider>
-    )
-}
+  return <ApolloProvider client={apolloClient}>{children}</ApolloProvider>;
+};

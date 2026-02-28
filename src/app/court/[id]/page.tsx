@@ -2,10 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client/react";
-import * as XLSX from "xlsx";
 
 import {
   GET_DOCUMENTS_BY_COURT,
@@ -13,7 +12,8 @@ import {
   CREATE_DOCUMENT,
   UPDATE_DOCUMENT,
   DELETE_DOCUMENT,
-  CREATE_BULK_DOCUMENTS,
+  CONFIRM_DOCUMENT,
+  GENERATE_PUBLIC_IMPORT_LINK,
 } from "@/lib/graphql/queries/document";
 
 // UI Components
@@ -57,11 +57,12 @@ import {
   HiOutlineTrash,
   HiPlus,
   HiFilter,
-  HiUpload,
   HiDocumentText,
   HiOutlineCloudUpload,
+  HiOutlineCheckCircle,
+  HiOutlineLink,
+  HiOutlineClipboardCopy,
 } from "react-icons/hi";
-import { HiXMark } from "react-icons/hi2";
 import { IoChevronBackOutline } from "react-icons/io5";
 import { toast } from "sonner";
 
@@ -69,6 +70,45 @@ const CourtDocumentsPage = () => {
   const params = useParams();
   const router = useRouter();
   const courtId = params.id as string;
+
+  // =========================================================================
+  // [BẢO MẬT] LẤY VÀ GIẢI MÃ TOKEN TỪ COOKIES ĐỂ XÁC ĐỊNH ROLE
+  // =========================================================================
+  const [currentUserRole, setCurrentUserRole] = useState("");
+
+  useEffect(() => {
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(";").shift();
+      return null;
+    };
+
+    const token = getCookie("accessToken");
+
+    if (token) {
+      try {
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split("")
+            .map(function (c) {
+              return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+            })
+            .join(""),
+        );
+
+        const decodedData = JSON.parse(jsonPayload);
+
+        if (decodedData.role) {
+          setCurrentUserRole(decodedData.role.toUpperCase());
+        }
+      } catch (error) {
+        console.error("Lỗi khi giải mã token:", error);
+      }
+    }
+  }, []);
 
   // --- STATES BỘ LỌC ---
   const [filters, setFilters] = useState({
@@ -78,16 +118,13 @@ const CourtDocumentsPage = () => {
     search: "",
   });
 
-  // --- STATES MODALS ---
+  // --- STATES MODALS THỦ CÔNG ---
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
 
-  // --- STATES CHO EXCEL PREVIEW & TIẾN ĐỘ ---
-  const [excelData, setExcelData] = useState<any[]>([]);
-  const [bulkErrors, setBulkErrors] = useState<any[]>([]);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
+  // --- STATES TẠO LINK PUBLIC IMPORT ---
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState("");
 
   // --- STATE FORM DATA ---
   const initialForm = {
@@ -166,11 +203,26 @@ const CourtDocumentsPage = () => {
     onError: (err) => toast.error(err.message),
   });
 
-  const [createBulkDocs] = useMutation(CREATE_BULK_DOCUMENTS, {
+  const [confirmDocument] = useMutation(CONFIRM_DOCUMENT, {
+    onCompleted: () => {
+      toast.success("Đã xác nhận giấy tờ thành công!");
+      refetchDocs();
+    },
     onError: (err) => toast.error(err.message),
   });
 
-  // --- HANDLERS (FORM THỦ CÔNG) ---
+  const [generatePublicLink, { loading: isGenerating }] = useMutation(
+    GENERATE_PUBLIC_IMPORT_LINK,
+    {
+      onCompleted: (data) => {
+        setGeneratedLink(data.generatePublicImportLink);
+        setIsLinkModalOpen(true);
+      },
+      onError: (err) => toast.error(err.message),
+    },
+  );
+
+  // --- HANDLERS (FORM THỦ CÔNG & BẢNG) ---
   const handleOpenCreate = () => {
     setEditingDocId(null);
     setFormData(initialForm);
@@ -248,6 +300,16 @@ const CourtDocumentsPage = () => {
     }
   };
 
+  const handleConfirmDoc = (id: string) => {
+    if (
+      window.confirm(
+        "Bạn có chắc chắn muốn XÁC NHẬN giấy tờ này? Sau khi xác nhận, nhân viên sẽ không thể sửa đổi.",
+      )
+    ) {
+      confirmDocument({ variables: { id } });
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -259,317 +321,14 @@ const CourtDocumentsPage = () => {
     }
   };
 
-  // --- HANDLERS (EXCEL IMPORT) ---
-  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data, { cellDates: true });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-    const findKey = (row: any, keyword: string) => {
-      return Object.keys(row).find((k) =>
-        k.toLowerCase().includes(keyword.toLowerCase()),
-      );
-    };
-
-    const formatDate = (val: any) => {
-      if (!val) return null;
-      if (val instanceof Date) {
-        return isNaN(val.getTime()) ? null : val.toISOString();
-      }
-      if (typeof val === "number") {
-        const unixDate = new Date((val - 25569) * 86400 * 1000);
-        return isNaN(unixDate.getTime()) ? null : unixDate.toISOString();
-      }
-      if (typeof val === "string") {
-        const parts = val.split(/[-/]/);
-        if (parts.length === 3) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          const year = parseInt(parts[2], 10);
-          const dateObj = new Date(Date.UTC(year, month, day));
-          if (!isNaN(dateObj.getTime())) return dateObj.toISOString();
-        }
-        const fallbackDate = new Date(val);
-        return isNaN(fallbackDate.getTime())
-          ? null
-          : fallbackDate.toISOString();
-      }
-      return null;
-    };
-
-    const mappedData = jsonData
-      .map((row: any, index: number) => {
-        const docCodeKey =
-          findKey(row, "loại văn bản") || findKey(row, "số, ký hiệu");
-        const docTypeKey = findKey(row, "giấy tờ, hồ sơ, tài liệu");
-        const recipientKey =
-          findKey(row, "người được tống đạt") || findKey(row, "đương sự");
-        const addressKey = findKey(row, "địa chỉ");
-        const receivedDateKey = findKey(row, "ngày nhận văn bản");
-        const dueDateKey = findKey(row, "thời hạn tống đạt");
-        const officialKey = findKey(row, "thư ký") || findKey(row, "cán bộ");
-        const contentKey = findKey(row, "nội dung văn bản");
-        const deliveryMethodKey = findKey(row, "hình thức tống đạt");
-
-        const distanceKey = findKey(row, "số km");
-        const deliveryFeeKey = findKey(row, "chi phí tống đạt đối với");
-        const accommodationFeeKey =
-          findKey(row, "hiểm trở") || findKey(row, "niêm yết");
-        const fuelFeeKey = findKey(row, "xăng xe");
-        const otherFeeKey = findKey(row, "chi phí khác");
-        const totalIntKey = findKey(row, "tổng chi phí (nội tỉnh)");
-        const totalExtKey = findKey(row, "tổng chi phí (ngoại tỉnh)");
-
-        const isoReceivedDate = formatDate(row[receivedDateKey]);
-        const isoDueDate = formatDate(row[dueDateKey]);
-
-        return {
-          _rowIndex: index + 2,
-          docCode: docCodeKey ? String(row[docCodeKey]).trim() : "",
-          docType: docTypeKey ? String(row[docTypeKey]).trim() : "Văn bản",
-          recipient: recipientKey ? String(row[recipientKey]).trim() : "",
-          address: addressKey ? String(row[addressKey]).trim() : "",
-          receivedDate: isoReceivedDate,
-          dueDate: isoDueDate || isoReceivedDate || new Date().toISOString(),
-          responsibleOfficialName: officialKey
-            ? String(row[officialKey]).trim()
-            : "",
-          deliveryMethod: deliveryMethodKey
-            ? String(row[deliveryMethodKey]).trim()
-            : "",
-          content: contentKey ? String(row[contentKey]).trim() : "",
-          distance: distanceKey ? parseFloat(row[distanceKey]) || 0 : 0,
-          deliveryFee: deliveryFeeKey
-            ? parseFloat(row[deliveryFeeKey]) || 0
-            : 0,
-          accommodationFee: accommodationFeeKey
-            ? parseFloat(row[accommodationFeeKey]) || 0
-            : 0,
-          fuelFee: fuelFeeKey ? parseFloat(row[fuelFeeKey]) || 0 : 0,
-          otherFee: otherFeeKey ? parseFloat(row[otherFeeKey]) || 0 : 0,
-          totalFeeInternal: totalIntKey ? parseFloat(row[totalIntKey]) || 0 : 0,
-          totalFeeExternal: totalExtKey ? parseFloat(row[totalExtKey]) || 0 : 0,
-        };
-      })
-      .filter((row) => {
-        if (!row.docCode && !row.recipient) return false;
-        const isDocCodeNumber =
-          !isNaN(Number(row.docCode)) && row.docCode.trim() !== "";
-        const isRecipientNumber =
-          !isNaN(Number(row.recipient)) || row.recipient.trim() === "";
-        if (isDocCodeNumber && isRecipientNumber) return false;
-        return true;
-      });
-
-    setExcelData(mappedData);
-    setBulkErrors([]);
-    e.target.value = "";
+  // --- HANDLERS (LINK IMPORT) ---
+  const handleCreatePublicLink = () => {
+    generatePublicLink({ variables: { courtId } });
   };
 
-  // --- HÀM TẢI FILE EXCEL MẪU [NEW] ---
-  const handleDownloadTemplate = () => {
-    const headers = [
-      "Số, ký hiệu",
-      "Giấy tờ, hồ sơ, tài liệu",
-      "Người được tống đạt",
-      "Địa chỉ",
-      "Ngày nhận văn bản",
-      "Thời hạn tống đạt",
-      "Thư ký",
-      "Hình thức tống đạt",
-      "Nội dung văn bản",
-      "Số km",
-      "Chi phí tống đạt đối với",
-      "Niêm yết",
-      "Xăng xe",
-      "Chi phí khác",
-      "Tổng chi phí (nội tỉnh)",
-      "Tổng chi phí (ngoại tỉnh)",
-    ];
-
-    const sampleData = [
-      "Số 164/TB-TA",
-      "Thông báo thụ lý vụ án",
-      "Nguyễn Văn A",
-      "Số 1, đường ABC, Hà Nội",
-      "26/12/2025",
-      "31/12/2025",
-      "Tên thư ký A",
-      "Trực tiếp",
-      "Thông báo nộp tiền tạm ứng án phí",
-      15,
-      150000,
-      50000,
-      30000,
-      0,
-      230000,
-      0,
-    ];
-
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, sampleData]);
-    worksheet["!cols"] = headers.map((h) => ({
-      wch: Math.max(h.length + 5, 15),
-    }));
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Data_Mau");
-    XLSX.writeFile(workbook, "Template_Nhap_Giay_To.xlsx");
-  };
-
-  // Hàm xử lý Edit Cell trực tiếp trên bảng Preview
-  const handleEditCell = (rowIndex: number, field: string, value: any) => {
-    setExcelData((prev) =>
-      prev.map((row) =>
-        row._rowIndex === rowIndex ? { ...row, [field]: value } : row,
-      ),
-    );
-    // Xóa lỗi của dòng này để user có thể bấm lưu lại
-    setBulkErrors((prev) => prev.filter((err) => err.rowIndex !== rowIndex));
-  };
-
-  // Hàm xóa nhanh 1 dòng trên bảng Preview
-  const handleDeleteRow = (rowIndex: number) => {
-    setExcelData((prev) => prev.filter((row) => row._rowIndex !== rowIndex));
-    setBulkErrors((prev) => prev.filter((err) => err.rowIndex !== rowIndex));
-  };
-
-  // --- HÀM LƯU HÀNG LOẠT (CHUNKING & VALIDATE LOCAL) ---
-  const handleSubmitBulk = async () => {
-    if (excelData.length === 0) return;
-
-    setIsImporting(true);
-    setImportProgress(0);
-    let totalSuccess = 0;
-    let allErrors: any[] = [];
-
-    const fullPayload = excelData.map(({ _rowIndex, ...rest }) => ({
-      courtId,
-      _rowIndex,
-      ...rest,
-    }));
-
-    // ====================================================================
-    // LỚP LỌC 1: VALIDATE NỘI BỘ (THIẾU THƯ KÝ, THIẾU MÃ, TRÙNG MÃ)
-    // ====================================================================
-    const codeMap = new Map<string, number>();
-    const localErrors: any[] = [];
-
-    fullPayload.forEach((row) => {
-      // 1. Kiểm tra thiếu Thư ký
-      if (
-        !row.responsibleOfficialName ||
-        row.responsibleOfficialName.trim() === ""
-      ) {
-        localErrors.push({
-          rowIndex: row._rowIndex,
-          message: "Vui lòng chọn Thư ký",
-        });
-      }
-
-      // 2. Kiểm tra thiếu Mã văn bản
-      if (!row.docCode || row.docCode.trim() === "") {
-        localErrors.push({
-          rowIndex: row._rowIndex,
-          message: "Mã văn bản không được trống",
-        });
-        return; // Bỏ qua check trùng mã bên dưới nếu không có mã
-      }
-
-      // 3. Kiểm tra trùng lặp Mã văn bản ngay trong bảng
-      const normalizedCode = row.docCode.trim().toLowerCase();
-      if (codeMap.has(normalizedCode)) {
-        localErrors.push({
-          rowIndex: row._rowIndex,
-          message: `Trùng mã với dòng số ${codeMap.get(normalizedCode)}`,
-        });
-      } else {
-        codeMap.set(normalizedCode, row._rowIndex);
-      }
-    });
-
-    if (localErrors.length > 0) {
-      toast.error("Phát hiện lỗi dữ liệu! Vui lòng sửa các ô màu đỏ.");
-      setBulkErrors(localErrors);
-      setIsImporting(false);
-      return;
-    }
-
-    // ====================================================================
-    // LỚP LỌC 2: GỬI LÊN BACKEND (CHUNKING) VÀ BẮT LỖI DATABASE
-    // ====================================================================
-    const CHUNK_SIZE = 50;
-    const totalChunks = Math.ceil(fullPayload.length / CHUNK_SIZE);
-
-    try {
-      for (let i = 0; i < fullPayload.length; i += CHUNK_SIZE) {
-        const chunk = fullPayload.slice(i, i + CHUNK_SIZE);
-
-        const { data } = await createBulkDocs({
-          variables: { inputs: chunk },
-        });
-
-        const result = data.createBulkDocuments;
-        totalSuccess += result.successCount;
-
-        if (result.errors && result.errors.length > 0) {
-          allErrors = [...allErrors, ...result.errors];
-        }
-
-        const currentChunkIndex = Math.floor(i / CHUNK_SIZE) + 1;
-        setImportProgress(Math.round((currentChunkIndex / totalChunks) * 100));
-      }
-
-      // XỬ LÝ GIAO DIỆN SAU KHI LƯU
-      if (allErrors.length > 0) {
-        toast.error(
-          `Đã lưu thành công ${totalSuccess} dòng. Còn lại ${allErrors.length} dòng bị lỗi cần xử lý!`,
-          { duration: 5000 },
-        );
-
-        // [PHÉP THUẬT]: Lọc bảng - Chỉ giữ lại những dòng có ID nằm trong danh sách lỗi
-        const errorRowIndexes = allErrors.map((err) => err.rowIndex);
-        setExcelData((prev) =>
-          prev.filter((row) => errorRowIndexes.includes(row._rowIndex)),
-        );
-        setBulkErrors(allErrors);
-
-        // Refetch lại bảng dữ liệu chính để hiển thị ngay các dòng đã lưu thành công
-        refetchDocs();
-      } else {
-        // Hoàn hảo 100% không có lỗi
-        toast.success(
-          `Tuyệt vời! Đã lưu thành công toàn bộ ${totalSuccess} dòng!`,
-        );
-        setIsExcelModalOpen(false);
-        setExcelData([]);
-        refetchDocs();
-      }
-    } catch (error: any) {
-      console.error("Lỗi Chunking:", error);
-      const errorMessage = error?.message || "";
-
-      // Nếu Backend chưa sửa kĩ mà vẫn văng Prisma error lên đây
-      if (
-        errorMessage.includes("Unique constraint failed") ||
-        errorMessage.includes("docCode")
-      ) {
-        toast.error(
-          "LỖI: Có 'Mã văn bản' trong bảng đã tồn tại trên Database. Vui lòng kiểm tra lại!",
-          { duration: 5000 },
-        );
-      } else {
-        toast.error(
-          "Quá trình lưu bị gián đoạn do lỗi kết nối. Vui lòng thử lại.",
-        );
-      }
-    } finally {
-      setIsImporting(false);
-      setImportProgress(0);
-    }
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(generatedLink);
+    toast.success("Đã copy đường link! Hãy gửi link này cho cán bộ.");
   };
 
   // --- DATA PREPARATION ---
@@ -611,7 +370,6 @@ const CourtDocumentsPage = () => {
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border">
         <div className="flex items-center gap-4">
           <HiFilter size={24} className="text-gray-400" />
-          {/* Thanh Search */}
           <div className="relative w-[250px]">
             <CiSearch
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -626,7 +384,6 @@ const CourtDocumentsPage = () => {
               }
             />
           </div>
-          {/* Lọc theo ngày */}
           <div className="flex items-center gap-2 border rounded-md px-3 py-1.5">
             <Input
               type="date"
@@ -647,7 +404,6 @@ const CourtDocumentsPage = () => {
             />
           </div>
 
-          {/* Lọc trạng thái */}
           <Select
             value={filters.status}
             onValueChange={(val) => setFilters({ ...filters, status: val })}
@@ -656,15 +412,16 @@ const CourtDocumentsPage = () => {
               <SelectValue placeholder="Tất cả trạng thái" />
             </SelectTrigger>
             <SelectContent>
+              {/* [CẬP NHẬT] Đúng 3 trạng thái của BE */}
               <SelectItem value="ALL">Tất cả</SelectItem>
-              <SelectItem value="WAITING">Đang đợi tống đạt</SelectItem>
-              <SelectItem value="COMPLETED">Đã tống đạt</SelectItem>
+              <SelectItem value="WAITING">Đợi tống đạt</SelectItem>
+              <SelectItem value="COMPLETED">Đã tống đạt (Chờ duyệt)</SelectItem>
+              <SelectItem value="CONFIRMED">Đã xác nhận (Chốt)</SelectItem>
               <SelectItem value="OVERDUE">Quá hạn</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Nút dropdown Thêm */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button className="bg-black text-white gap-2 font-bold">
@@ -679,12 +436,16 @@ const CourtDocumentsPage = () => {
               <HiDocumentText size={18} className="text-gray-500" />
               <span className="font-semibold">Thêm thủ công</span>
             </DropdownMenuItem>
+
             <DropdownMenuItem
               className="cursor-pointer py-3 gap-2"
-              onClick={() => setIsExcelModalOpen(true)}
+              onClick={handleCreatePublicLink}
+              disabled={isGenerating}
             >
-              <HiUpload size={18} className="text-gray-500" />
-              <span className="font-semibold">Thêm bằng Excel</span>
+              <HiOutlineLink size={18} className="text-blue-600" />
+              <span className="font-semibold text-blue-700">
+                Tạo link Import (30 phút)
+              </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -720,14 +481,14 @@ const CourtDocumentsPage = () => {
                 const totalDisplay =
                   (doc.totalFeeInternal || 0) + (doc.totalFeeExternal || 0);
 
-                // --- ĐÂY LÀ ĐOẠN ĐẢM BẢO CHẮC CHẮN BÔI ĐỎ KHI QUÁ HẠN ---
+                // Note: Quá hạn có thể đè lên màu nếu status chưa phải là CONFIRMED
                 const isOverdueVisual =
                   doc.status === "OVERDUE" || doc.isOverdue;
 
                 return (
                   <TableRow
                     key={doc.id}
-                    className={`transition-colors ${isOverdueVisual ? "bg-red-50 hover:bg-red-100" : "hover:bg-gray-50"}`}
+                    className={`transition-colors ${isOverdueVisual && doc.status !== "CONFIRMED" ? "bg-red-50 hover:bg-red-100" : "hover:bg-gray-50"}`}
                   >
                     <TableCell className="font-medium text-gray-500">
                       {index + 1}
@@ -751,7 +512,7 @@ const CourtDocumentsPage = () => {
                     </TableCell>
                     <TableCell
                       className={
-                        isOverdueVisual
+                        isOverdueVisual && doc.status !== "CONFIRMED"
                           ? "text-red-600 font-bold"
                           : "font-medium"
                       }
@@ -760,38 +521,79 @@ const CourtDocumentsPage = () => {
                         ? new Date(doc.dueDate).toLocaleDateString("vi-VN")
                         : "---"}
                     </TableCell>
+
+                    {/* ========================================================
+                        [LOGIC TRẠNG THÁI MỚI CHUẨN 3 BƯỚC BE] 
+                        ======================================================== */}
                     <TableCell>
-                      {doc.status === "WAITING" && (
+                      {/* B1: WAITING -> Đợi tống đạt (Cam) */}
+                      {doc.status === "WAITING" && !isOverdueVisual && (
                         <span className="text-orange-600 bg-orange-50 px-2 py-1 rounded font-bold text-xs">
                           Đợi tống đạt
                         </span>
                       )}
-                      {doc.status === "COMPLETED" && (
-                        <span className="text-green-600 bg-green-50 px-2 py-1 rounded font-bold text-xs">
+
+                      {/* B2: COMPLETED -> Đã tống đạt (Chờ Admin xác nhận) (Xanh lam) */}
+                      {doc.status === "COMPLETED" && !isOverdueVisual && (
+                        <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded font-bold text-xs">
                           Đã tống đạt
                         </span>
                       )}
-                      {doc.status === "OVERDUE" && (
+
+                      {/* B3: CONFIRMED -> Đã xác nhận (Xanh lá) */}
+                      {doc.status === "CONFIRMED" && (
+                        <span className="text-green-600 bg-green-50 px-2 py-1 rounded font-bold text-xs border border-green-200">
+                          Đã xác nhận
+                        </span>
+                      )}
+
+                      {/* QUÁ HẠN (Đỏ) - Chỉ hiển thị đỏ nếu chưa chốt CONFIRMED */}
+                      {isOverdueVisual && doc.status !== "CONFIRMED" && (
                         <span className="text-red-600 bg-red-100 px-2 py-1 rounded font-bold text-xs border border-red-200">
                           Quá hạn
                         </span>
                       )}
                     </TableCell>
+
                     <TableCell className="font-bold">
                       {totalDisplay.toLocaleString("vi-VN")} vnđ
                     </TableCell>
+
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-3 items-center">
-                        <HiOutlineTrash
-                          className="cursor-pointer text-gray-400 hover:text-red-600"
-                          size={20}
-                          onClick={() => handleDelete(doc.id)}
-                        />
-                        <HiOutlinePencil
-                          className="cursor-pointer text-gray-400 hover:text-blue-600"
-                          size={20}
-                          onClick={() => handleOpenEdit(doc)}
-                        />
+                        {/* ========================================================
+                            [LOGIC NÚT BẤM CHUẨN MỚI] 
+                            ======================================================== */}
+
+                        {/* NÚT XÁC NHẬN: Chỉ hiện cho ADMIN khi trạng thái đã đổi thành COMPLETED (Nhân viên đã báo cáo) */}
+                        {currentUserRole === "ADMIN" &&
+                          doc.status === "COMPLETED" && (
+                            <HiOutlineCheckCircle
+                              className="cursor-pointer text-gray-400 hover:text-green-600"
+                              size={22}
+                              title="Xác nhận giấy tờ (Chốt dữ liệu)"
+                              onClick={() => handleConfirmDoc(doc.id)}
+                            />
+                          )}
+
+                        {/* NÚT SỬA & XÓA: Admin thì lúc nào cũng sửa xóa được. Staff thì chỉ được đụng vào khi CHƯA CONFIRMED */}
+                        {(currentUserRole === "ADMIN" ||
+                          doc.status !== "CONFIRMED") && (
+                          <>
+                            <HiOutlinePencil
+                              className="cursor-pointer text-gray-400 hover:text-blue-600"
+                              size={20}
+                              title="Cập nhật"
+                              onClick={() => handleOpenEdit(doc)}
+                            />
+                            <HiOutlineTrash
+                              className="cursor-pointer text-gray-400 hover:text-red-600"
+                              size={20}
+                              title="Xóa"
+                              onClick={() => handleDelete(doc.id)}
+                            />
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1056,292 +858,36 @@ const CourtDocumentsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ===================================================================== */}
-      {/* MODAL 2: IMPORT EXCEL (HIỂN THỊ PREVIEW RỘNG & LỌC LỖI TỰ ĐỘNG) */}
-      {/* ===================================================================== */}
-      <Dialog
-        open={isExcelModalOpen}
-        onOpenChange={(open) => {
-          setIsExcelModalOpen(open);
-          if (!open) {
-            setExcelData([]);
-            setBulkErrors([]);
-            setIsImporting(false);
-            setImportProgress(0);
-          }
-        }}
-      >
-        <DialogContent className="max-w-[98vw] sm:max-w-[98vw] md:max-w-[98vw] lg:max-w-[98vw] w-full max-h-[98vh] flex flex-col overflow-hidden px-2 md:px-6">
+      {/* MODAL 2: HIỂN THỊ LINK BẢO MẬT ĐỂ COPY */}
+      <Dialog open={isLinkModalOpen} onOpenChange={setIsLinkModalOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl">Nhập dữ liệu từ Excel</DialogTitle>
+            <DialogTitle className="text-xl font-bold">
+              Link Nhập Excel Tự Động
+            </DialogTitle>
           </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto py-4 w-full">
-            {excelData.length === 0 ? (
-              <div className="py-10 flex flex-col items-center gap-4 w-full max-w-[500px] mx-auto">
-                <Button
-                  variant="outline"
-                  className="w-full border-dashed border-2 py-8 text-blue-600 bg-blue-50 hover:bg-blue-100"
-                  onClick={handleDownloadTemplate} // ĐÃ GẮN HÀM TẢI FILE MẪU
-                >
-                  <HiDocumentText size={24} className="mr-2" /> Tải File Excel
-                  Mẫu
-                </Button>
-                <span className="text-xs text-gray-400">--- HOẶC ---</span>
-                <Label className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
-                  <HiUpload size={40} className="text-gray-400 mb-2" />
-                  <span className="text-sm font-medium text-gray-700">
-                    Bấm để chọn file (.xlsx, .xls)
-                  </span>
-                  <input
-                    type="file"
-                    accept=".xlsx, .xls"
-                    className="hidden"
-                    onChange={handleExcelUpload}
-                  />
-                </Label>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4 w-full">
-                <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100 transition-colors">
-                  <span className="font-bold text-blue-800 transition-colors">
-                    Đã bóc tách được {excelData.length} văn bản.
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isImporting}
-                    onClick={() => {
-                      setExcelData([]);
-                      setBulkErrors([]);
-                    }}
-                  >
-                    Tải file khác
-                  </Button>
-                </div>
-
-                <div className="border rounded-xl max-h-[70vh] overflow-x-auto overflow-y-auto shadow-inner bg-gray-50/30">
-                  <Table className="relative whitespace-nowrap min-w-max">
-                    <TableHeader className="bg-gray-100 sticky top-0 z-20 shadow-sm transition-colors">
-                      <TableRow className="transition-colors">
-                        <TableHead className="w-[40px] text-center sticky left-0 z-30 bg-gray-100 border-r transition-colors">
-                          Xóa
-                        </TableHead>
-                        <TableHead className="w-[50px] text-center">
-                          Dòng
-                        </TableHead>
-                        <TableHead className="min-w-[180px]">Mã VB</TableHead>
-                        <TableHead className="min-w-[180px]">
-                          Người nhận
-                        </TableHead>
-                        <TableHead className="min-w-[200px]">Địa chỉ</TableHead>
-                        <TableHead className="min-w-[180px]">Thư ký</TableHead>
-                        <TableHead className="min-w-[120px]">
-                          Hình thức
-                        </TableHead>
-                        <TableHead className="min-w-[250px]">
-                          Nội dung
-                        </TableHead>
-                        <TableHead className="text-center">Số km</TableHead>
-                        <TableHead className="text-right">
-                          Phí TĐ (vnđ)
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Hỗ trợ NY (vnđ)
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Xăng xe (vnđ)
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Phí khác (vnđ)
-                        </TableHead>
-                        <TableHead className="text-right font-bold transition-colors">
-                          Tổng Nội
-                        </TableHead>
-                        <TableHead className="text-right font-bold transition-colors">
-                          Tổng Ngoại
-                        </TableHead>
-                        <TableHead className="sticky right-0 bg-gray-100 border-l shadow-sm z-30 min-w-[120px] text-center transition-colors">
-                          Trạng thái
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {excelData.map((row: any) => {
-                        const rowError = bulkErrors.find(
-                          (e) => e.rowIndex === row._rowIndex,
-                        );
-                        return (
-                          <TableRow
-                            key={row._rowIndex}
-                            className={`group ${rowError ? "bg-red-50 hover:bg-red-100/50" : "hover:bg-blue-50/30"} transition-colors`}
-                          >
-                            <TableCell className="p-0 text-center sticky left-0 bg-inherit border-r z-10 transition-colors">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors"
-                                onClick={() => handleDeleteRow(row._rowIndex)}
-                                title="Xóa dòng này"
-                              >
-                                <HiXMark size={16} />
-                              </Button>
-                            </TableCell>
-
-                            <TableCell className="font-bold text-gray-500 text-center transition-colors">
-                              {row._rowIndex}
-                            </TableCell>
-
-                            <TableCell className="p-1">
-                              <Input
-                                value={row.docCode}
-                                onChange={(e) =>
-                                  handleEditCell(
-                                    row._rowIndex,
-                                    "docCode",
-                                    e.target.value,
-                                  )
-                                }
-                                className={`h-8 text-xs font-semibold focus-visible:ring-1 focus-visible:ring-blue-500 focus:bg-white bg-transparent transition-all shadow-none ${!row.docCode ? "border-red-500 bg-red-100/50" : "border-transparent"}`}
-                                placeholder="Nhập mã..."
-                              />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Input
-                                value={row.recipient}
-                                onChange={(e) =>
-                                  handleEditCell(
-                                    row._rowIndex,
-                                    "recipient",
-                                    e.target.value,
-                                  )
-                                }
-                                className={`h-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500 focus:bg-white bg-transparent transition-all shadow-none ${!row.recipient ? "border-red-500 bg-red-100/50" : "border-transparent"}`}
-                                placeholder="Họ tên..."
-                              />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Input
-                                value={row.address}
-                                onChange={(e) =>
-                                  handleEditCell(
-                                    row._rowIndex,
-                                    "address",
-                                    e.target.value,
-                                  )
-                                }
-                                className="h-8 text-xs border-transparent focus-visible:ring-1 focus-visible:ring-blue-500 focus:bg-white bg-transparent transition-all shadow-none"
-                                placeholder="Địa chỉ..."
-                              />
-                            </TableCell>
-
-                            <TableCell className="p-1">
-                              <Select
-                                value={row.responsibleOfficialName || ""}
-                                onValueChange={(val) =>
-                                  handleEditCell(
-                                    row._rowIndex,
-                                    "responsibleOfficialName",
-                                    val,
-                                  )
-                                }
-                              >
-                                <SelectTrigger
-                                  className={`h-8 text-xs shadow-none transition-all ${!row.responsibleOfficialName ? "border-red-500 bg-red-100/50" : "border-transparent bg-transparent hover:bg-white"}`}
-                                >
-                                  <SelectValue placeholder="Chọn thư ký..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {officials.map((off: any) => (
-                                    <SelectItem
-                                      key={off.id}
-                                      value={off.name}
-                                      className="text-xs"
-                                    >
-                                      {off.name} ({off.title})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-
-                            <TableCell>{row.deliveryMethod || "---"}</TableCell>
-                            <TableCell
-                              className="max-w-[250px] truncate"
-                              title={row.content}
-                            >
-                              {row.content || "---"}
-                            </TableCell>
-
-                            <TableCell className="text-center">
-                              {row.distance}
-                            </TableCell>
-                            <TableCell className="text-right font-medium transition-colors">
-                              {row.deliveryFee?.toLocaleString("vi-VN")}
-                            </TableCell>
-                            <TableCell className="text-right font-medium transition-colors">
-                              {row.accommodationFee?.toLocaleString("vi-VN")}
-                            </TableCell>
-                            <TableCell className="text-right font-medium transition-colors">
-                              {row.fuelFee?.toLocaleString("vi-VN")}
-                            </TableCell>
-                            <TableCell className="text-right font-medium transition-colors">
-                              {row.otherFee?.toLocaleString("vi-VN")}
-                            </TableCell>
-                            <TableCell className="font-bold text-blue-600 text-right transition-colors">
-                              {row.totalFeeInternal?.toLocaleString("vi-VN")}
-                            </TableCell>
-                            <TableCell className="font-bold text-purple-600 text-right transition-colors">
-                              {row.totalFeeExternal?.toLocaleString("vi-VN")}
-                            </TableCell>
-
-                            <TableCell className="sticky right-0 border-l bg-inherit backdrop-blur-md z-10 text-center p-2 transition-colors">
-                              {rowError ? (
-                                <span
-                                  className="inline-flex items-center justify-center px-2 py-1 bg-red-100 text-red-700 font-bold text-[10px] uppercase rounded border border-red-200 transition-colors"
-                                  title={rowError.message}
-                                >
-                                  Lỗi dữ liệu
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center justify-center px-2 py-1 bg-green-100 text-green-700 font-bold text-[10px] uppercase rounded border border-green-200 transition-colors">
-                                  Sẵn sàng
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
+          <div className="flex flex-col gap-4 py-4">
+            <p className="text-sm text-gray-500">
+              Đường link này chứa mã bảo mật an toàn. Hãy gửi link này cho cán
+              bộ phụ trách.
+              <strong className="text-red-500 block mt-1">
+                Lưu ý: Link sẽ tự động vô hiệu hóa sau 30 phút.
+              </strong>
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <Input
+                readOnly
+                value={generatedLink}
+                className="bg-gray-50 text-gray-600 cursor-text font-mono text-xs"
+              />
+              <Button
+                onClick={handleCopyLink}
+                className="bg-black text-white shrink-0 gap-2"
+              >
+                <HiOutlineClipboardCopy size={18} /> Copy
+              </Button>
+            </div>
           </div>
-
-          <DialogFooter className="pt-4 border-t w-full flex justify-end gap-2 transition-colors">
-            <Button
-              variant="outline"
-              disabled={isImporting}
-              onClick={() => setIsExcelModalOpen(false)}
-            >
-              Đóng
-            </Button>
-            <Button
-              onClick={handleSubmitBulk}
-              className="bg-black text-white px-8 min-w-[160px] transition-colors"
-              disabled={isImporting}
-            >
-              {isImporting ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Đang lưu {importProgress}%...</span>
-                </div>
-              ) : (
-                "Lưu vào hệ thống"
-              )}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

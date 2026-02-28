@@ -65,6 +65,16 @@ import { IoBusinessOutline } from "react-icons/io5";
 import { toast } from "sonner";
 import { CREATE_ACCOUNT } from "@/lib/graphql/mutations/auth";
 
+// ========================================================
+// [FIX LỖI NEXT.JS]: Đưa component này ra ngoài hàm chính
+// ========================================================
+const LoadingSpinner = ({ text }: { text: string }) => (
+  <div className="flex items-center gap-2">
+    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+    <span>{text}</span>
+  </div>
+);
+
 const ManagementPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("courts");
@@ -284,15 +294,7 @@ const ManagementPage = () => {
   const staffs = staffData?.getStaffAccounts || [];
   const admins = adminData?.getAdminAccounts || [];
 
-  // Reusable Spinner Component
-  const LoadingSpinner = ({ text }: { text: string }) => (
-    <div className="flex items-center gap-2">
-      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-      <span>{text}</span>
-    </div>
-  );
-
-  // Helper render bảng
+  // Helper render bảng (Cái này là hàm trả về JSX, đặt trong này vẫn hợp lệ)
   const renderAccountTable = (data: any[]) => (
     <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
       <Table>
@@ -813,7 +815,7 @@ const ManagementPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL 4: CẤP TÀI KHOẢN (TRỌNG TÂM) --- */}
+      {/* --- MODAL 4: CẤP TÀI KHOẢN --- */}
       <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
@@ -927,15 +929,19 @@ const ManagementPage = () => {
                 }
               />
             </div>
+            {/* [ĐÃ SỬA]: Vô hiệu hóa ô chọn Role */}
             <div className="grid gap-2">
-              <Label>Vai trò</Label>
+              <Label className="text-gray-600">
+                Vai trò (Không thể thay đổi)
+              </Label>
               <Select
                 value={editingAccount?.role}
                 onValueChange={(val) =>
                   setEditingAccount({ ...editingAccount, role: val })
                 }
+                disabled // Khóa cứng
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-gray-100 opacity-70 cursor-not-allowed">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -943,6 +949,9 @@ const ManagementPage = () => {
                   <SelectItem value="STAFF">STAFF</SelectItem>
                 </SelectContent>
               </Select>
+              <span className="text-xs text-red-500 italic">
+                * Hệ thống không cho phép thay đổi vai trò của tài khoản đã tạo.
+              </span>
             </div>
           </div>
           <DialogFooter>

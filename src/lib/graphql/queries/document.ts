@@ -82,3 +82,46 @@ export const CREATE_BULK_DOCUMENTS = gql`
     }
   }
 `;
+
+export const CONFIRM_DOCUMENT = gql`
+  mutation confirmDocument($id: ID!) {
+    confirmDocument(id: $id) {
+      id
+      status
+    }
+  }
+`;
+
+// 1. API Tạo Link (Dành cho Admin)
+export const GENERATE_PUBLIC_IMPORT_LINK = gql`
+  mutation generatePublicImportLink($courtId: ID!) {
+    generatePublicImportLink(courtId: $courtId)
+  }
+`;
+
+// 2. API Public Import (Không cần Auth, truyền thẳng token vào args)
+export const PUBLIC_CREATE_BULK_DOCUMENTS = gql`
+  mutation publicCreateBulkDocuments(
+    $token: String!
+    $inputs: [CreateDocumentInput!]!
+  ) {
+    publicCreateBulkDocuments(token: $token, inputs: $inputs) {
+      successCount
+      errors {
+        rowIndex
+        message
+      }
+    }
+  }
+`;
+
+// Lấy danh sách cán bộ cho trang Public (Dùng token 30 phút)
+export const PUBLIC_GET_OFFICIALS = gql`
+  query publicGetOfficials($token: String!) {
+    publicGetOfficials(token: $token) {
+      id
+      name
+      title
+    }
+  }
+`;

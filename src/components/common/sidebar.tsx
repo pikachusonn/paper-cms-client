@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from "react"; // Thêm useState để quản lý popup
+import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -39,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"; // Import Dialog components
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Cookies from "js-cookie";
@@ -57,24 +57,37 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
   const pathname = usePathname();
   const router = useRouter();
 
-  // State cho Popup Đổi mật khẩu
+  // 1. TOP-LEVEL HOOKS
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [passwords, setPasswords] = useState({ old: "", new: "", confirm: "" });
+  const [userRole, setUserRole] = useState("");
 
+  // 2. LOGIC ĐỌC TOKEN (Không chứa Hook)
   const token = Cookies.get("accessToken");
   let userId = "";
+  let parsedRole = "";
+
   try {
     if (token) {
       const decoded: any = jwtDecode(token);
       userId = decoded.sub;
+      parsedRole = decoded.role;
     }
   } catch (e) {
     console.error("Token invalid");
   }
 
+  // 3. TOP-LEVEL USE-EFFECT (An toàn tuyệt đối)
+  useEffect(() => {
+    if (parsedRole) {
+      setUserRole(parsedRole.toUpperCase());
+    }
+  }, [parsedRole]);
+
+  // 4. TOP-LEVEL USE-QUERY
   const { data } = useQuery(GET_ACCOUNT_BY_ID, {
     variables: { id: userId },
-    // skip: !userId,
+    skip: !userId,
   });
 
   const user = data?.account;
@@ -84,15 +97,15 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
     Cookies.remove("refreshToken");
     router.push("/login");
   };
+
   const [callChangePasswordApi] = useMutation(CHANGE_PASSWORD);
+
   const handlePasswordChange = async () => {
     if (passwords.new !== passwords.confirm) {
       toast.error("Mật khẩu xác nhận không khớp!");
       return;
     }
-    console.log(userId, passwords.old, passwords.new); // Kiểm tra giá trị trước khi gọi API
     try {
-      // 2. Gọi API đổi mật khẩu
       const { data } = await callChangePasswordApi({
         variables: {
           input: {
@@ -102,20 +115,15 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
           },
         },
       });
-      console.log("Kết quả từ BE trả về:", data);
-      // 3. Xử lý kết quả dựa trên giá trị Boolean từ Backend
       if (data?.changePassword) {
-        // TRƯỜNG HỢP THÀNH CÔNG
         toast.success("Mật khẩu đã được cập nhật thành công!");
-        setIsDialogOpen(false); // Đóng popup
-        setPasswords({ old: "", new: "", confirm: "" }); // Reset form
+        setIsDialogOpen(false);
+        setPasswords({ old: "", new: "", confirm: "" });
       } else {
-        // TRƯỜNG HỢP SAI MẬT KHẨU CŨ (Nếu BE trả về false thay vì ném lỗi)
-        setIsDialogOpen(false); // Đóng popup theo ý bạn
+        setIsDialogOpen(false);
         toast.error("Mật khẩu hiện tại không chính xác!");
       }
     } catch (error: any) {
-      // TRƯỜNG HỢP CÓ LỖI (Ví dụ: BE trả về 400/500)
       setIsDialogOpen(false);
       toast.error(error.message || "Sai mật khẩu hiện tại hoặc lỗi hệ thống!");
     }
@@ -151,6 +159,14 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
             <SidebarGroupContent>
               <SidebarMenu>
                 {items.map((item) => {
+                  // [BẢO MẬT] ẨN MENU QUẢN LÝ NHÂN SỰ NẾU KHÔNG PHẢI LÀ ADMIN
+                  if (
+                    item.url.includes("/management") &&
+                    userRole !== "ADMIN"
+                  ) {
+                    return null;
+                  }
+
                   const isActive = pathname === item.url;
                   return (
                     <SidebarMenuItem key={item.title}>
@@ -214,11 +230,10 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
                   Vai trò
                 </p>
                 <p className="text-xs font-bold text-gray-700">
-                  {user?.role || "USER"}
+                  {userRole || user?.role || "USER"}
                 </p>
               </div>
 
-              {/* Mở Popup thay vì chuyển trang */}
               <DropdownMenuItem
                 onClick={() => setIsDialogOpen(true)}
                 className="cursor-pointer gap-2 py-2.5 text-gray-600 focus:bg-neutral-50"
@@ -240,7 +255,7 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
         </SidebarFooter>
       </Sidebar>
 
-      {/* --- POPUP ĐỔI MẬT KHẨU (DIALOG) --- */}
+      {/* --- POPUP ĐỔI MẬT KHẨU --- */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
