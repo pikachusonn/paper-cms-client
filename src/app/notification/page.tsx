@@ -67,9 +67,9 @@ const NotificationPage = () => {
   };
 
   // --- DATA PREPARATION ---
-  const notifications = data?.getMyNotifications?.data || [];
+  const notifications = (data as any)?.getMyNotifications?.data || [];
   // Lấy unreadCount từ tab "Tất cả" hoặc tab hiện tại để hiển thị trên tiêu đề (nếu cần)
-  const unreadCount = data?.getMyNotifications?.unreadCount || 0;
+  const unreadCount = (data as any)?.getMyNotifications?.unreadCount || 0;
 
   return (
     <div className="p-8 flex flex-col gap-6 bg-[#f8f9fa] min-h-screen w-full">

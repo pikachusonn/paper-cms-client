@@ -34,7 +34,7 @@ export const errorLink = new ApolloLink((operation, forward) => {
                         });
 
                         if (data) {
-                            setAccessToken(data.refreshToken.accessToken);
+                            setAccessToken((data as any).refreshToken.accessToken);
                         }
                         queue.forEach(callback => callback());
                         queue = [];

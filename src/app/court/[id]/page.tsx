@@ -102,6 +102,7 @@ const CourtDocumentsPage = () => {
         const decodedData = JSON.parse(jsonPayload);
 
         if (decodedData.role) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setCurrentUserRole(decodedData.role.toUpperCase());
         }
       } catch (error) {
@@ -214,7 +215,7 @@ const CourtDocumentsPage = () => {
   const [generatePublicLink, { loading: isGenerating }] = useMutation(
     GENERATE_PUBLIC_IMPORT_LINK,
     {
-      onCompleted: (data) => {
+      onCompleted: (data: any) => {
         setGeneratedLink(data.generatePublicImportLink);
         setIsLinkModalOpen(true);
       },
@@ -332,13 +333,13 @@ const CourtDocumentsPage = () => {
   };
 
   // --- DATA PREPARATION ---
-  const documents = docsData?.getDocumentsByCourt?.data || [];
-  const statHeader = docsData?.getDocumentsByCourt?.statHeader || {
+  const documents = (docsData as any)?.getDocumentsByCourt?.data || [];
+  const statHeader = (docsData as any)?.getDocumentsByCourt?.statHeader || {
     waiting: 0,
     overdue: 0,
   };
   const officials =
-    officialsData?.getOfficialsByCourt?.filter((o: any) => !o.isDeleted) || [];
+    (officialsData as any)?.getOfficialsByCourt?.filter((o: any) => !o.isDeleted) || [];
 
   return (
     <div className="p-8 flex flex-col gap-6 bg-[#f8f9fa] min-h-screen">

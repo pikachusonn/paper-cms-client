@@ -89,7 +89,7 @@ function PublicImportContent() {
   });
 
   const officials =
-    officialsData?.publicGetOfficials?.filter((o: any) => !o.isDeleted) || [];
+    (officialsData as any)?.publicGetOfficials?.filter((o: any) => !o.isDeleted) || [];
 
   // --- HÀM TẢI FILE EXCEL MẪU ---
   const handleDownloadTemplate = () => {
@@ -187,8 +187,8 @@ function PublicImportContent() {
         const recipientKey =
           findKey(row, "người được tống đạt") || findKey(row, "đương sự");
         const addressKey = findKey(row, "địa chỉ");
-        const receivedDateKey = findKey(row, "ngày nhận văn bản");
-        const dueDateKey = findKey(row, "thời hạn tống đạt");
+        const receivedDateKey = findKey(row, "ngày nhận văn bản") as any;
+        const dueDateKey = findKey(row, "thời hạn tống đạt") as any;
         const officialKey = findKey(row, "thư ký") || findKey(row, "cán bộ");
         const contentKey = findKey(row, "nội dung văn bản");
         const deliveryMethodKey = findKey(row, "hình thức tống đạt");
@@ -312,7 +312,7 @@ function PublicImportContent() {
           variables: { token, inputs: chunk },
         });
 
-        const result = data.publicCreateBulkDocuments;
+        const result = (data as any).publicCreateBulkDocuments;
         totalSuccess += result.successCount;
         if (result.errors?.length > 0)
           allErrors = [...allErrors, ...result.errors];

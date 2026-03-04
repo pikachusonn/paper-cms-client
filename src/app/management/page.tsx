@@ -290,9 +290,9 @@ const ManagementPage = () => {
   };
 
   // --- DATA PREPARATION ---
-  const courts = courtData?.courts || [];
-  const staffs = staffData?.getStaffAccounts || [];
-  const admins = adminData?.getAdminAccounts || [];
+  const courts = (courtData as any)?.courts || [];
+  const staffs = (staffData as any)?.getStaffAccounts || [];
+  const admins = (adminData as any)?.getAdminAccounts || [];
 
   // Helper render bảng (Cái này là hàm trả về JSX, đặt trong này vẫn hợp lệ)
   const renderAccountTable = (data: any[]) => (
@@ -537,7 +537,7 @@ const ManagementPage = () => {
                               <HiOutlinePencil
                                 className="cursor-pointer hover:text-blue-600"
                                 size={18}
-                                onClick={() => handleOpenEditOfficial(off)}
+                                onClick={() => handleOpenAddOfficial(off)}
                               />
                               {!off.isDeleted && (
                                 <HiOutlineTrash

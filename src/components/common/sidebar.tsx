@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
@@ -90,7 +91,7 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
     skip: !userId,
   });
 
-  const user = data?.account;
+  const user = (data as any)?.account;
 
   const handleLogout = () => {
     Cookies.remove("accessToken");
@@ -115,7 +116,7 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
           },
         },
       });
-      if (data?.changePassword) {
+      if ((data as any)?.changePassword) {
         toast.success("Mật khẩu đã được cập nhật thành công!");
         setIsDialogOpen(false);
         setPasswords({ old: "", new: "", confirm: "" });
@@ -129,6 +130,10 @@ const AppSidebar = ({ items }: { items: SidebarItem[] }) => {
     }
   };
 
+  if (pathname === "/login") {
+    return <></>;
+  }
+  
   return (
     <>
       <Sidebar collapsible="icon">
