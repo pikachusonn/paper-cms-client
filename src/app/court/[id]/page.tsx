@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client/react";
 
@@ -15,7 +15,7 @@ import {
   CONFIRM_DOCUMENT,
   GENERATE_PUBLIC_IMPORT_LINK,
 } from "@/lib/graphql/queries/document";
-
+import * as XLSX from "xlsx";
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,8 +63,20 @@ import {
   HiOutlineLink,
   HiOutlineClipboardCopy,
 } from "react-icons/hi";
-import { IoChevronBackOutline } from "react-icons/io5";
 import { toast } from "sonner";
+import { dangerousDestinationList, REDUCED_PRICE_MAP } from "@/constant/common";
+import { formatVND, parseVND } from "@/lib/utils";
+import { GET_COURT_BY_ID } from "@/lib/graphql/queries/court";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { format } from "date-fns";
 
 const CourtDocumentsPage = () => {
   const params = useParams();
@@ -117,6 +129,7 @@ const CourtDocumentsPage = () => {
     endDate: "",
     status: "ALL",
     search: "",
+    page: 1,
   });
 
   // --- STATES MODALS THỦ CÔNG ---
@@ -161,7 +174,7 @@ const CourtDocumentsPage = () => {
       variables: {
         filter: {
           courtId,
-          page: 1,
+          page: filters?.page || 1,
           limit: 50,
           search: filters.search || undefined,
           status: filters.status !== "ALL" ? filters.status : undefined,
@@ -176,6 +189,12 @@ const CourtDocumentsPage = () => {
       skip: !courtId,
     },
   );
+
+  const { data: courtData } = useQuery(GET_COURT_BY_ID, {
+    variables: {
+      id: courtId,
+    },
+  });
 
   // --- API MUTATIONS ---
   const [createDoc] = useMutation(CREATE_DOCUMENT, {
@@ -244,7 +263,7 @@ const CourtDocumentsPage = () => {
       address: doc.address || "",
       evidenceUrl: doc.evidenceUrl || "",
       distance: doc.distance || 0,
-      deliveryFee: doc.deliveryFee || 0,
+      deliveryFee: formatVND(doc.deliveryFee || 0),
       accommodationFee: doc.accommodationFee || 0,
       fuelFee: doc.fuelFee || 0,
       otherFee: doc.otherFee || 0,
@@ -270,11 +289,11 @@ const CourtDocumentsPage = () => {
       deliveryMethod: formData.deliveryMethod,
       content: formData.content,
       distance: parseFloat(formData.distance) || 0,
-      deliveryFee: parseFloat(formData.deliveryFee) || 0,
-      accommodationFee: parseFloat(formData.accommodationFee) || 0,
-      fuelFee: parseFloat(formData.fuelFee) || 0,
-      otherFee: parseFloat(formData.otherFee) || 0,
-      totalFeeInternal: parseFloat(formData.totalFeeInternal) || 0,
+      deliveryFee: parseVND(formData.deliveryFee),
+      accommodationFee: parseVND(formData.accommodationFee),
+      fuelFee: parseVND(formData.fuelFee),
+      otherFee: parseVND(formData.otherFee),
+      totalFeeInternal: parseVND(formData.totalFeeInternal),
       totalFeeExternal: parseFloat(formData.totalFeeExternal) || 0,
     };
 
@@ -339,7 +358,149 @@ const CourtDocumentsPage = () => {
     overdue: 0,
   };
   const officials =
-    (officialsData as any)?.getOfficialsByCourt?.filter((o: any) => !o.isDeleted) || [];
+    (officialsData as any)?.getOfficialsByCourt?.filter(
+      (o: any) => !o.isDeleted,
+    ) || [];
+
+  const isReducedPrice = (desti?: string) => {
+    const destination = normalize(desti || formData.address);
+    const areas = REDUCED_PRICE_MAP[courtId] || [];
+    return areas.some((d) => destination.includes(normalize(d)));
+  };
+
+  const normalize = (str: string) => {
+    return str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // remove accents
+      .toLowerCase();
+  };
+
+  const dangerousFee = (desti?: string) => {
+    const destination = normalize(desti || formData.address || "");
+
+    const match = dangerousDestinationList.find((dd) =>
+      dd.destinations.some((d) => destination.includes(normalize(d))),
+    );
+    // return match ? match.fee : 0;
+    return 0;
+  };
+
+  const onDistanceChange = (distance: number) => {
+    const reduced = isReducedPrice();
+    const fee = distance < 25 ? 65000 : reduced ? 65000 : 130000;
+    const dangerFee = dangerousFee();
+    const fuelFee = distance > 26 ? (distance - 26) * 2 * 4000 : 0;
+    setFormData((prev: any) => {
+      console.log(
+        formatVND(fee + dangerFee + fuelFee + parseVND(prev.otherFee)),
+      );
+
+      return {
+        ...prev,
+        distance,
+        deliveryFee: fee,
+        fuelFee: fuelFee,
+        accommodationFee: dangerFee,
+        totalFeeInternal: fee + dangerFee + fuelFee + parseVND(prev.otherFee),
+      };
+    });
+  };
+
+  const onAddressChange = (address: string) => {
+    const reduced = isReducedPrice(address);
+    const fee = formData?.distance < 25 ? 65000 : reduced ? 65000 : 130000;
+    const dangerFee = dangerousFee(address);
+    setFormData((prev: any) => ({
+      ...prev,
+      address: address,
+      accommodationFee: dangerousFee(address),
+      deliveryFee: fee,
+      totalFeeInternal:
+        fee + dangerFee + parseVND(prev.fuelFee) + parseVND(prev.otherFee),
+    }));
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFormData((prev: any) => ({
+      ...prev,
+      totalFeeInternal:
+        parseVND(prev.deliveryFee) +
+        parseVND(prev.fuelFee) +
+        parseVND(prev.accommodationFee) +
+        parseVND(prev.otherFee),
+    }));
+  }, [formData?.otherFee]);
+
+  const totalFee = useMemo(() => {
+    return documents?.reduce((sum, doc) => {
+      const value = Number(
+        String(doc.totalFeeInternal || 0).replace(/\./g, ""),
+      );
+      return sum + value;
+    }, 0);
+  }, [documents]);
+
+  const exportPhuluc = () => {
+    const data = documents?.map((doc, index) => ({
+      TT: index,
+      "Giấy tờ, hồ sơ, tài liệu cần tống đạt": `${doc?.content}, ${doc?.docCode}, ngày ${doc?.receivedDate}`,
+      "Địa chỉ của người được tống đạt": doc?.address,
+      "Ngày, tháng, năm tống đạt": format(doc?.receivedDate, "dd/MM/yyyy"),
+      "Thời hạn tống đạt": format(doc?.dueDate, "dd/MM/yyyy"),
+      "Bên giao văn bản": "",
+      "Bên nhận văn bản": "",
+      "Chi phí tống đạt đối với từng giấy tờ, hồ sơ, tài liệu": formatVND(
+        doc?.deliveryFee,
+      ),
+      "Số Km thực tế": doc?.distance * 2,
+      "Số km chênh lệch tính từ km số 51":
+        doc?.distance * 2 > 51 ? doc?.distance * 2 - 51 : 0,
+      "Đơn giá": 0,
+      "Số tiền": 0,
+      "Chi phí khác (vé đi qua trạm thu phí, đường thủy trong tỉnh…)":
+        formatVND(doc?.otherFee),
+      "Tổng số tiền": formatVND(doc?.totalFeeInternal),
+      "Ghi chú": "",
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      `Phụ lục (${courtData?.court?.name})`,
+    );
+
+    XLSX.writeFile(workbook, `Phụ lục (${courtData?.court?.name}).xlsx`);
+  };
+
+  const getPages = () => {
+    const pages: (number | "...")[] = [];
+    const totalPage = Math.ceil(
+      (docsData as any)?.getDocumentsByCourt?.total / 50,
+    );
+    if (totalPage <= 5) {
+      return Array.from({ length: totalPage }, (_, i) => i + 1);
+    }
+
+    pages.push(1);
+
+    if (filters?.page > 3) pages.push("...");
+
+    const start = Math.max(2, filters?.page - 1);
+    const end = Math.min(totalPage - 1, filters?.page + 1);
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    if (filters?.page < totalPage - 2) pages.push("...");
+
+    pages.push(totalPage);
+
+    return pages;
+  };
 
   return (
     <div className="p-8 flex flex-col gap-6 bg-[#f8f9fa] min-h-screen">
@@ -352,7 +513,9 @@ const CourtDocumentsPage = () => {
           Quản lý giấy tờ
         </span>
         <span>{">"}</span>
-        <span className="text-black font-bold">Chi tiết Tòa án</span>
+        <span className="text-black font-bold">
+          {courtData?.court?.name || "Chi tiết Tòa án"}
+        </span>
       </div>
 
       {/* THỐNG KÊ */}
@@ -423,33 +586,44 @@ const CourtDocumentsPage = () => {
           </Select>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="bg-black text-white gap-2 font-bold">
-              <HiPlus size={18} /> Thêm giấy tờ
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[200px]">
-            <DropdownMenuItem
-              className="cursor-pointer py-3 gap-2"
-              onClick={handleOpenCreate}
-            >
-              <HiDocumentText size={18} className="text-gray-500" />
-              <span className="font-semibold">Thêm thủ công</span>
-            </DropdownMenuItem>
+        <div className="flex items-center gap-4">
+          {/* <Button className="bg-black text-white gap-2 font-bold">
+            Xuất Bảng Kê
+          </Button> */}
+          <Button
+            className="bg-black text-white gap-2 font-bold"
+            onClick={exportPhuluc}
+          >
+            Xuất Phụ Lục
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="bg-black text-white gap-2 font-bold">
+                <HiPlus size={18} /> Thêm giấy tờ
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              <DropdownMenuItem
+                className="cursor-pointer py-3 gap-2"
+                onClick={handleOpenCreate}
+              >
+                <HiDocumentText size={18} className="text-gray-500" />
+                <span className="font-semibold">Thêm thủ công</span>
+              </DropdownMenuItem>
 
-            <DropdownMenuItem
-              className="cursor-pointer py-3 gap-2"
-              onClick={handleCreatePublicLink}
-              disabled={isGenerating}
-            >
-              <HiOutlineLink size={18} className="text-blue-600" />
-              <span className="font-semibold text-blue-700">
-                Tạo link Import (30 phút)
-              </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem
+                className="cursor-pointer py-3 gap-2"
+                onClick={handleCreatePublicLink}
+                disabled={isGenerating}
+              >
+                <HiOutlineLink size={18} className="text-blue-600" />
+                <span className="font-semibold text-blue-700">
+                  Tạo link Import (30 phút)
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* TABLE GIẤY TỜ CHÍNH */}
@@ -463,7 +637,10 @@ const CourtDocumentsPage = () => {
               <TableHead className="max-w-[200px]">Được tống đạt</TableHead>
               <TableHead>Hạn tống đạt</TableHead>
               <TableHead>Trạng thái</TableHead>
-              <TableHead>Tổng chi phí</TableHead>
+              <TableHead className="">
+                <span>Tổng chi phí</span>&nbsp;
+                <span>({formatVND(totalFee)} vnd)</span>
+              </TableHead>
               <TableHead className="text-right">Hành động</TableHead>
             </TableRow>
           </TableHeader>
@@ -604,10 +781,64 @@ const CourtDocumentsPage = () => {
           </TableBody>
         </Table>
       </div>
+      <Pagination>
+        <PaginationContent>
+          {/* Previous */}
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setFilters((prev) => ({
+                  ...prev,
+                  page: prev.page - 1,
+                }));
+              }}
+            />
+          </PaginationItem>
+
+          {/* Page numbers */}
+          {getPages().map((p, index) => (
+            <PaginationItem key={index}>
+              {p === "..." ? (
+                <PaginationEllipsis />
+              ) : (
+                <PaginationLink
+                  href="#"
+                  isActive={p === filters.page}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setFilters((prev) => ({
+                      ...prev,
+                      page: p,
+                    }));
+                  }}
+                >
+                  {p}
+                </PaginationLink>
+              )}
+            </PaginationItem>
+          ))}
+
+          {/* Next */}
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setFilters((prev) => ({
+                  ...prev,
+                  page: prev.page + 1,
+                }));
+              }}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
 
       {/* MODAL 1: FORM THÊM / SỬA THỦ CÔNG */}
       <Dialog open={isFormModalOpen} onOpenChange={setIsFormModalOpen}>
-        <DialogContent className="max-w-[800px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="min-w-[800px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">
               {editingDocId
@@ -667,13 +898,13 @@ const CourtDocumentsPage = () => {
                     setFormData({ ...formData, responsibleOfficialId: val })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Chọn thư ký" />
                   </SelectTrigger>
                   <SelectContent>
                     {officials.map((off: any) => (
                       <SelectItem key={off.id} value={off.id}>
-                        {off.name} ({off.title})
+                        {off.name} {off?.title && `(${off.title})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -707,9 +938,7 @@ const CourtDocumentsPage = () => {
                 <Input
                   placeholder="Địa chỉ cụ thể"
                   value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
+                  onChange={(e) => onAddressChange(e.target.value)}
                 />
               </div>
             </div>
@@ -767,26 +996,26 @@ const CourtDocumentsPage = () => {
                 <Input
                   type="number"
                   value={formData.distance}
-                  onChange={(e) =>
-                    setFormData({ ...formData, distance: e.target.value })
-                  }
+                  onChange={(e) => onDistanceChange(Number(e.target.value))}
                 />
               </div>
               <div className="grid gap-2">
                 <Label>Chi phí tống đạt (vnđ)</Label>
                 <Input
-                  type="number"
-                  value={formData.deliveryFee}
+                  disabled
+                  type="text"
+                  value={formatVND(formData.deliveryFee)}
                   onChange={(e) =>
                     setFormData({ ...formData, deliveryFee: e.target.value })
                   }
                 />
               </div>
-              <div className="grid gap-2">
-                <Label>Hỗ trợ niêm yết (vnđ)</Label>
+              {/* <div className="grid gap-2">
+                <Label>Hỗ trợ hiểm trở (vnđ)</Label>
                 <Input
-                  type="number"
-                  value={formData.accommodationFee}
+                  disabled
+                  type="text"
+                  value={formatVND(formData.accommodationFee)}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
@@ -794,12 +1023,13 @@ const CourtDocumentsPage = () => {
                     })
                   }
                 />
-              </div>
-              <div className="grid gap-2">
+              </div> */}
+              <div className="grid gap-2 col-span-2">
                 <Label>Hỗ trợ xăng xe (vnđ)</Label>
                 <Input
-                  type="number"
-                  value={formData.fuelFee}
+                  disabled
+                  type="text"
+                  value={formatVND(formData.fuelFee)}
                   onChange={(e) =>
                     setFormData({ ...formData, fuelFee: e.target.value })
                   }
@@ -808,25 +1038,30 @@ const CourtDocumentsPage = () => {
               <div className="grid gap-2 col-span-2">
                 <Label>Chi phí Khác (vnđ)</Label>
                 <Input
-                  type="number"
-                  value={formData.otherFee}
-                  onChange={(e) =>
-                    setFormData({ ...formData, otherFee: e.target.value })
-                  }
+                  type="text"
+                  value={formatVND(formData.otherFee)}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\./g, ""); // remove dots
+                    if (!/^\d*$/.test(raw)) return; // only numbers
+                    setFormData({ ...formData, otherFee: raw });
+                  }}
                 />
               </div>
               <div className="grid gap-2">
                 <Label>Tổng chi phí Nội tỉnh (vnđ)</Label>
                 <Input
-                  type="number"
+                  disabled
+                  type="text"
                   className="bg-gray-100 font-bold"
-                  value={formData.totalFeeInternal}
-                  onChange={(e) =>
+                  value={formatVND(formData.totalFeeInternal)}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\./g, ""); // remove dots
+                    if (!/^\d*$/.test(raw)) return; // only number
                     setFormData({
                       ...formData,
-                      totalFeeInternal: e.target.value,
-                    })
-                  }
+                      totalFeeInternal: raw,
+                    });
+                  }}
                 />
               </div>
               <div className="grid gap-2">

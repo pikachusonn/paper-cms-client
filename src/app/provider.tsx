@@ -1,5 +1,5 @@
 "use client";
-import { getRefreshToken } from "@/helper/token.helper";
+import { getAccessToken } from "@/helper/token.helper";
 import { apolloClient } from "@/lib/apollo/client";
 import { ApolloProvider } from "@apollo/client/react";
 import { usePathname } from "next/navigation";
@@ -8,18 +8,17 @@ import { useEffect, useMemo, useState } from "react";
 export const Providers = ({ children }: { children: React.ReactNode }) => {
   const [initialize, setInitialize] = useState(false);
   const pathname = usePathname();
-  const refreshToken = useMemo(() => getRefreshToken(), []);
+  const accessToken = useMemo(() => getAccessToken(), []);
   const isPublicRoute = pathname?.startsWith("/public-import");
   const isAuthRoute = pathname === "/login";
 
   useEffect(() => {
     const init = () => {
-      if (!isPublicRoute && !isAuthRoute && !refreshToken) {
+      if (!isPublicRoute && !isAuthRoute && !accessToken) {
         window.location.href = "/login";
         return;
       }
-      if (!!refreshToken && isAuthRoute) {
-        console.log("heheh");
+      if (!!accessToken && isAuthRoute) {
         window.location.href = "/";
         return;
       }
@@ -28,7 +27,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
     };
 
     init();
-  }, [isPublicRoute, isAuthRoute, refreshToken]);
+  }, [isPublicRoute, isAuthRoute, accessToken]);
 
   if (!initialize) return null;
 

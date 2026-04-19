@@ -25,7 +25,7 @@ import Link from "next/link";
 
 const DashboardPage = () => {
   // State quản lý tham số API
-  const [year, setYear] = useState<number>(2025); // Biến year (Int!)
+ const [year, setYear] = useState<number>(new Date().getFullYear()); // Biến year (Int!)
   const [tempSearch, setTempSearch] = useState(""); // Lưu giá trị đang gõ
   const [appliedSearch, setAppliedSearch] = useState(""); // Giá trị thực tế dùng để query
 

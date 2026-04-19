@@ -19,3 +19,16 @@ export const GET_DASHBOARD_STATS = gql`
     }
   }
 `;
+
+export const GET_COURT_BY_ID = gql`
+  query GetCourtById($id: ID!) {
+    court(id: $id) {
+      id,
+      name,
+      address,
+      phone,
+      email,
+      courtNumber,
+    }
+  }
+`

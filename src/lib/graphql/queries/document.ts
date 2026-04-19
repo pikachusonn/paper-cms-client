@@ -19,6 +19,11 @@ export const GET_DOCUMENTS_BY_COURT = gql`
           id
           name
         }
+        distance
+        deliveryFee
+        accommodationFee
+        fuelFee
+        otherFee
         totalFeeInternal
         totalFeeExternal
         isOverdue

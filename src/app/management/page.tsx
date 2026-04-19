@@ -64,6 +64,7 @@ import {
 import { IoBusinessOutline } from "react-icons/io5";
 import { toast } from "sonner";
 import { CREATE_ACCOUNT } from "@/lib/graphql/mutations/auth";
+import { useRouter } from "next/navigation";
 
 // ========================================================
 // [FIX LỖI NEXT.JS]: Đưa component này ra ngoài hàm chính
@@ -293,6 +294,7 @@ const ManagementPage = () => {
   const courts = (courtData as any)?.courts || [];
   const staffs = (staffData as any)?.getStaffAccounts || [];
   const admins = (adminData as any)?.getAdminAccounts || [];
+  const router = useRouter()
 
   // Helper render bảng (Cái này là hàm trả về JSX, đặt trong này vẫn hợp lệ)
   const renderAccountTable = (data: any[]) => (
@@ -514,6 +516,9 @@ const ManagementPage = () => {
                           <TableRow
                             key={off.id}
                             className="border-none hover:bg-gray-50/50"
+                            onClick={()=>{
+                            router.push(`/management/officials/${off?.id}`)
+                        }}
                           >
                             <TableCell className="font-bold text-gray-700">
                               {off.name}
