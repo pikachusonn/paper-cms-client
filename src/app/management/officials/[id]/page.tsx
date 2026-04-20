@@ -142,7 +142,7 @@ const OfficialDetail = () => {
   };
 
   const totalFee = useMemo(() => {
-    return documents?.reduce((sum, doc) => {
+    return documents?.reduce((sum: number, doc: any) => {
       const totalDisplay =
         doc?.distance <= 25 ? 14000 : doc?.distance <= 200 ? 29000 : 30000;
       const value = Number(String(totalDisplay || 0).replace(/\./g, ""));
@@ -166,7 +166,7 @@ const OfficialDetail = () => {
         </BreadcrumbList>
       </Breadcrumb>
       <h5 className="text-[18px] font-semibold">Chi tiết thư kí</h5>
-      <div className="flex items-stretch gap-[12px] justify-between">
+      <div className="flex items-stretch gap-[32px] justify-between">
         <div className="grid grid-cols-[140px_1fr]">
           <h6 className="font-semibold">Tên:</h6>
           <span>{staffData?.name}</span>
@@ -183,9 +183,9 @@ const OfficialDetail = () => {
           </a>
         </div>
 
-        <div className="border rounded-md flex items-center shadow-md bg-white w-1/2 pr-[8px]">
+        <div className="border rounded-md flex items-center shadow-md bg-white flex-1 pr-[8px]">
           <div className="flex items-center gap-[8px] py-[8px] px-[20px] h-full flex-2">
-            <span className="font-semibold">Lọc theo tháng</span>
+            <span className="font-semibold">Ngày nhận</span>
             <DatePicker
               startDate={startDate}
               setStartDate={setStartDate}
@@ -209,7 +209,7 @@ const OfficialDetail = () => {
           <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead className="w-[50px]">STT</TableHead>
-              <TableHead>Ngày nhận</TableHead>
+              <TableHead>Ngày Tống Đạt</TableHead>
               <TableHead>Mã văn bản</TableHead>
               <TableHead className="max-w-[200px]">Được tống đạt</TableHead>
               <TableHead>Hạn tống đạt</TableHead>
@@ -250,7 +250,7 @@ const OfficialDetail = () => {
                     <TableCell className="font-medium text-gray-500">
                       {index + 1}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="font-bold">
                       {doc.receivedDate
                         ? new Date(doc.receivedDate).toLocaleDateString("vi-VN")
                         : "---"}

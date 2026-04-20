@@ -168,27 +168,28 @@ const CourtDocumentsPage = () => {
     skip: !courtId,
   });
 
-  const { data: docsData, refetch: refetchDocs } = useQuery(
-    GET_DOCUMENTS_BY_COURT,
-    {
-      variables: {
-        filter: {
-          courtId,
-          page: filters?.page || 1,
-          limit: 50,
-          search: filters.search || undefined,
-          status: filters.status !== "ALL" ? filters.status : undefined,
-          fromDate: filters.startDate
-            ? new Date(filters.startDate).toISOString()
-            : undefined,
-          toDate: filters.endDate
-            ? new Date(filters.endDate).toISOString()
-            : undefined,
-        },
+  const {
+    data: docsData,
+    refetch: refetchDocs,
+    loading: loadingDocs,
+  } = useQuery(GET_DOCUMENTS_BY_COURT, {
+    variables: {
+      filter: {
+        courtId,
+        page: filters?.page || 1,
+        limit: 50,
+        search: filters.search || undefined,
+        status: filters.status !== "ALL" ? filters.status : undefined,
+        fromDate: filters.startDate
+          ? new Date(filters.startDate).toISOString()
+          : undefined,
+        toDate: filters.endDate
+          ? new Date(filters.endDate).toISOString()
+          : undefined,
       },
-      skip: !courtId,
     },
-  );
+    skip: !courtId,
+  });
 
   const { data: courtData } = useQuery(GET_COURT_BY_ID, {
     variables: {
@@ -433,7 +434,7 @@ const CourtDocumentsPage = () => {
   }, [formData?.otherFee]);
 
   const totalFee = useMemo(() => {
-    return documents?.reduce((sum, doc) => {
+    return documents?.reduce((sum: number, doc: any) => {
       const value = Number(
         String(doc.totalFeeInternal || 0).replace(/\./g, ""),
       );
@@ -442,7 +443,7 @@ const CourtDocumentsPage = () => {
   }, [documents]);
 
   const exportPhuluc = () => {
-    const data = documents?.map((doc, index) => ({
+    const data = documents?.map((doc: any, index: number) => ({
       TT: index,
       "Giấy tờ, hồ sơ, tài liệu cần tống đạt": `${doc?.content}, ${doc?.docCode}, ngày ${doc?.receivedDate}`,
       "Địa chỉ của người được tống đạt": doc?.address,
@@ -469,10 +470,10 @@ const CourtDocumentsPage = () => {
     XLSX.utils.book_append_sheet(
       workbook,
       worksheet,
-      `Phụ lục (${courtData?.court?.name})`,
+      `Phụ lục (${(courtData as any)?.court?.name})`,
     );
 
-    XLSX.writeFile(workbook, `Phụ lục (${courtData?.court?.name}).xlsx`);
+    XLSX.writeFile(workbook, `Phụ lục (${(courtData as any)?.court?.name}).xlsx`);
   };
 
   const getPages = () => {
@@ -514,7 +515,7 @@ const CourtDocumentsPage = () => {
         </span>
         <span>{">"}</span>
         <span className="text-black font-bold">
-          {courtData?.court?.name || "Chi tiết Tòa án"}
+          {(courtData as any)?.court?.name || "Chi tiết Tòa án"}
         </span>
       </div>
 
@@ -632,7 +633,7 @@ const CourtDocumentsPage = () => {
           <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead className="w-[50px]">STT</TableHead>
-              <TableHead>Ngày nhận</TableHead>
+              <TableHead>Ngày Tống đạt</TableHead>
               <TableHead>Mã văn bản</TableHead>
               <TableHead className="max-w-[200px]">Được tống đạt</TableHead>
               <TableHead>Hạn tống đạt</TableHead>
@@ -651,7 +652,7 @@ const CourtDocumentsPage = () => {
                   colSpan={8}
                   className="text-center py-10 text-gray-400"
                 >
-                  Không có giấy tờ nào.
+                  {loadingDocs ? "Loading..." : "Không có giấy tờ nào."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -671,7 +672,7 @@ const CourtDocumentsPage = () => {
                     <TableCell className="font-medium text-gray-500">
                       {index + 1}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="font-bold">
                       {doc.receivedDate
                         ? new Date(doc.receivedDate).toLocaleDateString("vi-VN")
                         : "---"}
